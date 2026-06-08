@@ -1,0 +1,321 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:wifi_scan/wifi_scan.dart';
+import 'package:egts_tracker/core/egts/egts_builder.dart';
+import 'package:egts_tracker/core/egts/egts_client.dart';
+import 'package:egts_tracker/core/prefs/app_prefs.dart';
+import 'package:egts_tracker/models/models.dart';
+
+/// Центральный провайдер состояния приложения.
+///
+/// Управляет:
+///   • GPS-позицией (geolocator)
+///   • BLE-сканированием (flutter_blue_plus) → iBeacon
+///   • WiFi-сканированием (wifi_scan)
+///   • NFC обрабатывается через NfcHandler (platform channel)
+///   • Логом событий и EGTS-пакетов
+class TrackerProvider extends ChangeNotifier {
+  final AppPrefs prefs;
+
+  late ServerConfig      _serverConfig;
+  late List<NfcEntry>    _nfcWhitelist;
+  late List<BeaconEntry> _beaconWhitelist;
+  late List<WifiEntry>   _wifiWhitelist;
+
+  TrackerProvider(this.prefs) {
+    _serverConfig    = prefs.serverConfig;
+    _nfcWhitelist    = prefs.nfcWhitelist;
+    _beaconWhitelist = prefs.beaconWhitelist;
+    _wifiWhitelist   = prefs.wifiWhitelist;
+  }
+
+  // ─── State ───────────────────────────────────────────────────────────────
+
+  GpsData _gps = GpsData.empty();
+  GpsData get gps => _gps;
+
+  final List<NfcEvent>    _nfcEvents    = [];
+  final List<BeaconEvent> _beaconEvents = [];
+  final List<WifiEvent>   _wifiEvents   = [];
+  LbsEvent? _lastLbs;
+
+  List<NfcEvent>    get nfcEvents    => List.unmodifiable(_nfcEvents);
+  List<BeaconEvent> get beaconEvents => List.unmodifiable(_beaconEvents);
+  List<WifiEvent>   get wifiEvents   => List.unmodifiable(_wifiEvents);
+  LbsEvent?         get lastLbs      => _lastLbs;
+
+  final List<EgtsPacketInfo> _packets = [];
+  List<EgtsPacketInfo> get packets => List.unmodifiable(_packets);
+
+  bool _scanning = false;
+  bool get scanning => _scanning;
+
+  String _statusMsg = 'Ожидание';
+  String get statusMsg => _statusMsg;
+
+  // ─── Config (mutable from Settings) ───────────────────────────────────
+
+  ServerConfig     get serverConfig    => _serverConfig;
+  List<NfcEntry>   get nfcWhitelist    => _nfcWhitelist;
+  List<BeaconEntry>get beaconWhitelist => _beaconWhitelist;
+  List<WifiEntry>  get wifiWhitelist   => _wifiWhitelist;
+
+  // ─── Internal ────────────────────────────────────────────────────────────
+
+  int _packetCounter = 0;
+  StreamSubscription<Position>? _gpsSub;
+  StreamSubscription<List<ScanResult>>? _bleSub;
+  Timer? _wifiTimer;
+
+  // ─── Start / Stop ────────────────────────────────────────────────────────
+
+  Future<void> startScanning() async {
+    if (_scanning) return;
+    _scanning = true;
+    _statusMsg = 'Сканирование...';
+    notifyListeners();
+
+    await _startGps();
+    await _startBle();
+    _startWifiPoll();
+  }
+
+  void stopScanning() {
+    _scanning = false;
+    _statusMsg = 'Остановлено';
+    _gpsSub?.cancel();
+    _bleSub?.cancel();
+    _wifiTimer?.cancel();
+    FlutterBluePlus.stopScan();
+    notifyListeners();
+  }
+
+  // ─── GPS ─────────────────────────────────────────────────────────────────
+
+  Future<void> _startGps() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+    LocationPermission perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.denied) return;
+    }
+    _gpsSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high, distanceFilter: 5,
+      ),
+    ).listen((pos) {
+      _gps = GpsData(
+        lat: pos.latitude, lon: pos.longitude, alt: pos.altitude,
+        speedKmh: (pos.speed * 3.6), courseDeg: pos.heading.toInt(),
+        accuracy: pos.accuracy.toDouble(), isValid: true,
+        ts: pos.timestamp,
+      );
+      notifyListeners();
+    });
+  }
+
+  // ─── BLE iBeacon ─────────────────────────────────────────────────────────
+
+  Future<void> _startBle() async {
+    try {
+      await FlutterBluePlus.startScan(continuousUpdates: true);
+      _bleSub = FlutterBluePlus.scanResults.listen((results) {
+        for (final r in results) {
+          final adv = r.advertisementData;
+          // iBeacon: manufacturer data manufacturer ID = 0x004C (Apple)
+          final mfr = adv.manufacturerData[0x004C];
+          if (mfr != null && mfr.length >= 23 && mfr[0] == 0x02 && mfr[1] == 0x15) {
+            final uuid = _parseIBeaconUuid(mfr);
+            final major = (mfr[17] << 8) | mfr[18];
+            final minor = (mfr[19] << 8) | mfr[20];
+            final beacon = BeaconEvent(
+              uuid: uuid, major: major, minor: minor,
+              rssi: r.rssi, distance: _estimateDistance(mfr[21], r.rssi),
+              mac: r.device.remoteId.str,
+            );
+            _onBeaconDetected(beacon);
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('BLE error: $e');
+    }
+  }
+
+  String _parseIBeaconUuid(List<int> mfr) {
+    final b = mfr.sublist(2, 18).map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${b.substring(0, 8)}-${b.substring(8, 12)}-${b.substring(12, 16)}-${b.substring(16, 20)}-${b.substring(20)}'
+        .toUpperCase();
+  }
+
+  double _estimateDistance(int txPower, int rssi) {
+    if (rssi == 0) return -1;
+    final ratio = rssi / txPower;
+    return ratio < 1.0
+        ? ratio.abs()
+        : (0.89976 * (ratio.abs() * 7.7095) + 0.111);
+  }
+
+  // ─── WiFi ─────────────────────────────────────────────────────────────────
+
+  void _startWifiPoll() {
+    _scanWifi();
+    _wifiTimer = Timer.periodic(const Duration(seconds: 15), (_) => _scanWifi());
+  }
+
+  Future<void> _scanWifi() async {
+    try {
+      final can = await WiFiScan.instance.canStartScan();
+      if (can != CanStartScan.yes) return;
+      await WiFiScan.instance.startScan();
+      final aps = await WiFiScan.instance.getScannedResults();
+      for (final ap in aps) {
+        final evt = WifiEvent(
+          ssid: ap.ssid, bssid: ap.bssid,
+          rssi: ap.level, frequency: ap.frequency,
+        );
+        _onWifiDetected(evt);
+      }
+    } catch (e) {
+      debugPrint('WiFi scan error: $e');
+    }
+  }
+
+  // ─── Event handlers ───────────────────────────────────────────────────────
+
+  /// Вызывается из NfcHandlerWidget при считывании метки
+  void onNfcDetected(NfcEvent evt) {
+    _nfcEvents.insert(0, evt);
+    if (_nfcEvents.length > 50) _nfcEvents.removeLast();
+    notifyListeners();
+
+    final match = _nfcWhitelist
+        .where((e) => e.uid.toUpperCase() == evt.uid.toUpperCase())
+        .firstOrNull;
+    if (match != null) {
+      _buildAndSendEgts(triggerType: 'nfc', triggerId: evt.uid, nfc: evt);
+    }
+  }
+
+  void _onBeaconDetected(BeaconEvent evt) {
+    // Дедупликация по UUID+major+minor (обновляем, не дублируем)
+    _beaconEvents.removeWhere(
+        (e) => e.uuid == evt.uuid && e.major == evt.major && e.minor == evt.minor);
+    _beaconEvents.insert(0, evt);
+    if (_beaconEvents.length > 50) _beaconEvents.removeLast();
+    notifyListeners();
+
+    final match = _beaconWhitelist
+        .where((e) => e.matches(evt.uuid, evt.major, evt.minor))
+        .firstOrNull;
+    if (match != null) {
+      _buildAndSendEgts(triggerType: 'beacon', triggerId: '${evt.uuid}/${evt.major}/${evt.minor}', beacon: evt);
+    }
+  }
+
+  void _onWifiDetected(WifiEvent evt) {
+    _wifiEvents.removeWhere((e) => e.bssid == evt.bssid);
+    _wifiEvents.insert(0, evt);
+    if (_wifiEvents.length > 50) _wifiEvents.removeLast();
+    notifyListeners();
+
+    final match = _wifiWhitelist.where((e) => e.matches(evt.ssid, evt.bssid)).firstOrNull;
+    if (match != null) {
+      _buildAndSendEgts(triggerType: 'wifi', triggerId: evt.ssid, wifi: evt);
+    }
+  }
+
+  // ─── EGTS build + send ────────────────────────────────────────────────────
+
+  Future<void> _buildAndSendEgts({
+    required String triggerType,
+    required String triggerId,
+    NfcEvent?    nfc,
+    BeaconEvent? beacon,
+    WifiEvent?   wifi,
+  }) async {
+    final pid = ++_packetCounter;
+    late final Uint8List bytes;
+
+    if (nfc != null) {
+      bytes = EgtsBuilder.buildNfcPacket(
+        nfc: nfc, gps: _gps, lbs: _lastLbs,
+        terminalId: _serverConfig.terminalId, packetId: pid,
+      );
+    } else if (beacon != null) {
+      bytes = EgtsBuilder.buildBeaconPacket(
+        beacon: beacon, gps: _gps, lbs: _lastLbs,
+        terminalId: _serverConfig.terminalId, packetId: pid,
+      );
+    } else if (wifi != null) {
+      bytes = EgtsBuilder.buildWifiPacket(
+        wifi: wifi, gps: _gps, lbs: _lastLbs,
+        terminalId: _serverConfig.terminalId, packetId: pid,
+      );
+    } else {
+      return;
+    }
+
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
+    final decoded = EgtsBuilder.decode(bytes);
+
+    var info = EgtsPacketInfo(
+      bytes: bytes, hexStr: hex, decoded: decoded,
+      triggerType: triggerType, triggerId: triggerId,
+      ts: DateTime.now(),
+    );
+    _packets.insert(0, info);
+    if (_packets.length > 100) _packets.removeLast();
+    notifyListeners();
+
+    // Отправка
+    final result = await EgtsClient(_serverConfig).send(bytes);
+    final idx = _packets.indexWhere(
+        (p) => p.ts == info.ts && p.triggerId == info.triggerId);
+    if (idx >= 0) {
+      _packets[idx] = _packets[idx].copyWith(
+        sent: result.success,
+        sendError: result.error,
+      );
+    }
+    _statusMsg = result.success
+        ? 'Отправлено: $triggerType $triggerId'
+        : 'Ошибка: ${result.error}';
+    notifyListeners();
+  }
+
+  // ─── Settings update ──────────────────────────────────────────────────────
+
+  Future<void> updateServerConfig(ServerConfig cfg) async {
+    _serverConfig = cfg;
+    await prefs.saveServerConfig(cfg);
+    notifyListeners();
+  }
+
+  Future<void> updateNfcWhitelist(List<NfcEntry> list) async {
+    _nfcWhitelist = list;
+    await prefs.saveNfcWhitelist(list);
+    notifyListeners();
+  }
+
+  Future<void> updateBeaconWhitelist(List<BeaconEntry> list) async {
+    _beaconWhitelist = list;
+    await prefs.saveBeaconWhitelist(list);
+    notifyListeners();
+  }
+
+  Future<void> updateWifiWhitelist(List<WifiEntry> list) async {
+    _wifiWhitelist = list;
+    await prefs.saveWifiWhitelist(list);
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    stopScanning();
+    super.dispose();
+  }
+}

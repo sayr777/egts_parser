@@ -1,0 +1,46 @@
+name: egts_tracker
+description: EGTS Tracker — мониторинг iBeacon, NFC, WiFi, LBS с отправкой EGTS-пакетов
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.2
+
+  # Persistent storage (whitelist, server config)
+  shared_preferences: ^2.2.3
+
+  # GPS / ГЛОНАСС
+  geolocator: ^11.1.0
+
+  # BLE iBeacon
+  flutter_blue_plus: ^1.32.12
+
+  # NFC / RFID
+  flutter_nfc_kit: ^3.4.0
+
+  # WiFi scanning
+  wifi_scan: ^0.4.1
+
+  # HTTP client
+  http: ^1.2.1
+
+  # UI
+  cupertino_icons: ^1.0.6
+  flutter_slidable: ^3.1.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env
+*.log
+*.json.log
+
+# Excel temp
+~$*.xlsx
+
+# Flutter / Dart
+egts_app_temp/
+MOBILE_APP/.dart_tool/
+MOBILE_APP/.flutter-plugins
+MOBILE_APP/.flutter-plugins-dependencies
+MOBILE_APP/build/
+MOBILE_APP/.packages
+MOBILE_APP/pubspec.lock
+MOBILE_APP/android/.gradle/
+MOBILE_APP/android/local.properties
+MOBILE_APP/android/key.properties
+MOBILE_APP/android/app/debug/
+MOBILE_APP/android/app/release/
+MOBILE_APP/android/app/profile/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code internal
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
