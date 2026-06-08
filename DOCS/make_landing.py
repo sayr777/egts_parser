@@ -11,7 +11,30 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 from reportlab.platypus import Image
 from reportlab.lib.colors import HexColor
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import io, os
+
+# ─── Регистрация TTF-шрифтов с поддержкой кириллицы ─────────────────────────
+_FONT_DIR = r"C:\Windows\Fonts"
+
+def _reg(name, ttf_file):
+    path = os.path.join(_FONT_DIR, ttf_file)
+    if os.path.exists(path):
+        pdfmetrics.registerFont(TTFont(name, path))
+        return True
+    return False
+
+# Arial (основной), Courier New (моноширинный)
+_have_arial    = _reg("Arial",           "arial.ttf")
+_have_arialbd  = _reg("Arial-Bold",      "arialbd.ttf")
+_have_arialit  = _reg("Arial-Italic",    "ariali.ttf")
+_have_couriernew = _reg("CourierNew",    "cour.ttf")
+
+# Fallback — встроенные шрифты (не поддерживают кириллицу)
+FONT_NORMAL = "Arial"       if _have_arial   else "Helvetica"
+FONT_BOLD   = "Arial-Bold"  if _have_arialbd else "Helvetica-Bold"
+FONT_MONO   = "CourierNew"  if _have_couriernew else "Courier"
 
 W, H = A4
 
@@ -43,24 +66,24 @@ def make_pdf(out_path: str) -> None:
         return ParagraphStyle(name, parent=base, **kw)
 
     sHero   = S("hero",   fontSize=28, leading=34, textColor=WHITE,
-                 alignment=TA_CENTER, fontName="Helvetica-Bold")
+                 alignment=TA_CENTER, fontName=FONT_BOLD)
     sSub    = S("sub",    fontSize=13, leading=18, textColor=WHITE,
-                 alignment=TA_CENTER, fontName="Helvetica")
+                 alignment=TA_CENTER, fontName=FONT_NORMAL)
     sH2     = S("h2",    fontSize=16, leading=20, textColor=NAVY,
-                 fontName="Helvetica-Bold", spaceAfter=4)
+                 fontName=FONT_BOLD, spaceAfter=4)
     sH3     = S("h3",    fontSize=12, leading=16, textColor=GREEN,
-                 fontName="Helvetica-Bold", spaceAfter=2)
+                 fontName=FONT_BOLD, spaceAfter=2)
     sBody   = S("body",  fontSize=10, leading=14, textColor=DGRAY,
-                 alignment=TA_JUSTIFY)
+                 fontName=FONT_NORMAL, alignment=TA_JUSTIFY)
     sCaption= S("cap",   fontSize=8,  leading=11, textColor=DGRAY,
-                 alignment=TA_CENTER)
+                 fontName=FONT_NORMAL, alignment=TA_CENTER)
     sMono   = S("mono",  fontSize=9,  leading=13, textColor=NAVY,
-                 fontName="Courier", backColor=GRAY, leftIndent=6, rightIndent=6,
+                 fontName=FONT_MONO, backColor=GRAY, leftIndent=6, rightIndent=6,
                  spaceBefore=2, spaceAfter=2)
     sBadge  = S("badge", fontSize=9,  leading=12, textColor=WHITE,
-                 fontName="Helvetica-Bold", alignment=TA_CENTER)
+                 fontName=FONT_BOLD, alignment=TA_CENTER)
     sFooter = S("footer",fontSize=8,  leading=11, textColor=DGRAY,
-                 alignment=TA_CENTER)
+                 fontName=FONT_NORMAL, alignment=TA_CENTER)
 
     story = []
 
@@ -136,7 +159,7 @@ def make_pdf(out_path: str) -> None:
     tech_table = Table(
         [[Paragraph(str(c), S("th" if i == 0 else "td",
                               fontSize=9,
-                              fontName="Helvetica-Bold" if i == 0 else "Helvetica",
+                              fontName=FONT_BOLD if i == 0 else FONT_NORMAL,
                               textColor=WHITE if i == 0 else DGRAY,
                               alignment=TA_CENTER if j == 0 else TA_LEFT))
           for j, c in enumerate(row)]
@@ -278,7 +301,7 @@ def make_pdf(out_path: str) -> None:
     srv_table = Table(
         [[Paragraph(str(c), S("shdr" if i == 0 else "scell",
                               fontSize=9,
-                              fontName="Helvetica-Bold" if i == 0 else "Courier" if j == 0 else "Helvetica",
+                              fontName=FONT_BOLD if i == 0 else FONT_MONO if j == 0 else FONT_NORMAL,
                               textColor=WHITE if i == 0 else (NAVY if j == 0 else DGRAY)))
           for j, c in enumerate(row)]
          for i, row in enumerate(server_data)],
@@ -412,7 +435,7 @@ def make_pdf(out_path: str) -> None:
 def _screen_block(title: str, color, body_text: str, body_style) -> Table:
     SS = getSampleStyleSheet()
     title_s = ParagraphStyle("st", parent=SS["Normal"],
-                              fontSize=11, fontName="Helvetica-Bold",
+                              fontSize=11, fontName=FONT_BOLD,
                               textColor=WHITE, alignment=TA_CENTER)
     t = Table([
         [Paragraph(title, title_s)],
@@ -433,10 +456,11 @@ def _screen_block(title: str, color, body_text: str, body_style) -> Table:
 def _tech_col(title: str, color, items: list) -> Table:
     SS = getSampleStyleSheet()
     title_s = ParagraphStyle("tc", parent=SS["Normal"],
-                              fontSize=10, fontName="Helvetica-Bold",
+                              fontSize=10, fontName=FONT_BOLD,
                               textColor=WHITE, alignment=TA_CENTER)
     item_s  = ParagraphStyle("ti", parent=SS["Normal"],
-                              fontSize=9, leading=13, textColor=HexColor("#595959"))
+                              fontSize=9, leading=13, fontName=FONT_NORMAL,
+                              textColor=HexColor("#595959"))
     rows = [[Paragraph(title, title_s)]] + [[Paragraph(f"• {i}", item_s)] for i in items]
     t = Table(rows, colWidths=[(A4[0]-36*mm)/2 - 6])
     style = [
