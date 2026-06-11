@@ -10,10 +10,11 @@
 - [04-rtls-iso-standard.md](./04-rtls-iso-standard.md) — RTLS как стандарт ISO/IEC 24730.
 - [05-excel-parser.md](./05-excel-parser.md) — Анализ bidirectional Excel-парсера.
 - [06-rtls-standards-deep-dive.md](./06-rtls-standards-deep-dive.md) — Глубокий анализ стандартов RTLS и рекомендации.
+- [07-egts-rnis-integration.md](./07-egts-rnis-integration.md) — Интеграция с РНИС системами.
 
 ---
 
-**Дата создания:** 2026-06-11  
-**Автор:** Grok (на основе обсуждения с Anton Tenyakov)
+**Дата обновления:** 2026-06-11  
+**Автор:** Grok (на основе обсуждений с Anton Tenyakov)
 
 Можно добавлять новые файлы по мере развития проекта.
