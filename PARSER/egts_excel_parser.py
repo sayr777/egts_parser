@@ -34,6 +34,7 @@ EGTS Bidirectional Excel Parser
   SRT_201         — RTLS Sensor Data
   SRT_202         — RTLS Tag Identity
   SRT_203         — RTLS Event Data
+  SRT_205         — LBS (base stations) data for road graph positioning (new, discussion 18)
   SRT_RAW         — нераспознанные подзаписи
 """
 
@@ -63,7 +64,7 @@ from egts.models import (
     SrAdSensorsData, SrAbsCntrData, SrTermIdentity,
     SrRecordResponse, SrResultCode, SrAuthInfo,
     SrCountersData, SrPassengersCounters,
-    SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrRaw,
+    SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom205, SrRaw,
 )
 from egts.const import SRT_NAMES, PT_NAMES, SVC_NAMES, RESULT_CODES
 
@@ -83,6 +84,7 @@ SRT200C = "FFF2CC"
 SRT201C = "E2EFDA"
 SRT202C = "DEEAF1"
 SRT203C = "FCE4D6"
+SRT205C = "D9EAD3"  # LBS (new for discussion 18)
 
 
 def _fill(c: str) -> PatternFill:
@@ -213,6 +215,7 @@ def decode_to_workbook(packets: list[EGTSPacket]) -> openpyxl.Workbook:
     _sheet_srt201(wb, packets)
     _sheet_srt202(wb, packets)
     _sheet_srt203(wb, packets)
+    _sheet_srt205(wb, packets)  # LBS (discussion 18)
     _sheet_raw(wb, packets)
     return wb
 
@@ -587,6 +590,28 @@ def _sheet_srt203(wb, packets):
                cols, ct, rows, _vals, section_color="375623")
 
 
+def _sheet_srt205(wb, packets):
+    """LBS data sheet (SRT=205, discussion 18) — base stations + TA/RSSI for road graph matching."""
+    rows = _collect(packets, 205)
+    cols = ["PKT#","SDR#","SR#","serving_cell_id","lac_tac","mcc","mnc","rssi_dbm","timing_advance",
+            "bs_lat","bs_lon","raw_lbs_lat","raw_lbs_lon","neighbors","lbs_quality","technology","HEX_SRD"]
+    ct   = ["","","","ATTR","ATTR","ATTR","ATTR","ATTR","ATTR",
+            "ATTR","ATTR","ATTR","ATTR","ATTR","ATTR","ATTR","HEX"]
+    def _vals(r: _Row):
+        d = r.rd.subrecord.to_dict()
+        neigh = d.get("neighbors", [])
+        neigh_str = ";".join([f"{n.get('cell_id','')}:{n.get('rssi_dbm','')}" for n in neigh]) if neigh else ""
+        return [r.pkt_idx+1, r.sdr_idx+1, r.sr_idx+1,
+                d.get("serving_cell_id",""), d.get("lac_tac",""), d.get("mcc",""), d.get("mnc",""),
+                d.get("rssi_dbm",""), d.get("timing_advance",""),
+                d.get("bs_lat",""), d.get("bs_lon",""),
+                d.get("raw_lbs_lat",""), d.get("raw_lbs_lon",""),
+                neigh_str, d.get("lbs_quality",""), d.get("technology",""),
+                r.rd.subrecord.to_bytes().hex().upper()]
+    _srt_sheet(wb, "SRT_205", "EGTS_SR_CUSTOM_SRT205 (SRT=205) — LBS (base stations) for road graph (discussion 18)",
+               cols, ct, rows, _vals, section_color="38761D")
+
+
 def _sheet_raw(wb, packets):
     ws = wb.create_sheet("SRT_RAW")
     cols = ["PKT#","SDR#","SR#","SRT","SRT_name","SRL","raw_hex","note"]
@@ -633,6 +658,8 @@ def encode_from_workbook(xlsx_path: str) -> list[EGTSPacket]:
     srt201_attrs = _read_srt_sheet(wb, "SRT_201",        ["PKT#","SDR#","SR#","temperature_01C","vibration","pressure_hPa","sensor_flags"])
     srt202_attrs = _read_srt_sheet(wb, "SRT_202",        ["PKT#","SDR#","SR#","tag_id","zone_id","group_id","rssi_dBm"])
     srt203_attrs = _read_srt_sheet(wb, "SRT_203",        ["PKT#","SDR#","SR#","event_type","zone_id","event_time","event_flags"])
+    srt205_attrs = _read_srt_sheet(wb, "SRT_205",        ["PKT#","SDR#","SR#","serving_cell_id","lac_tac","mcc","mnc","rssi_dbm","timing_advance",
+                                                          "bs_lat","bs_lon","raw_lbs_lat","raw_lbs_lon","neighbors","lbs_quality","technology"])  # LBS (18)
 
     # Читаем заголовки и SDR-метаданные
     hdr_attrs = _read_srt_sheet(wb, "HEADER",
@@ -696,6 +723,7 @@ def encode_from_workbook(xlsx_path: str) -> list[EGTSPacket]:
                 (201, srt201_attrs, SrCustom201,        _build_srt201),
                 (202, srt202_attrs, SrCustom202,        _build_srt202),
                 (203, srt203_attrs, SrCustom203,        _build_srt203),
+                (205, srt205_attrs, SrCustom205,        _build_srt205),  # LBS (18)
             ]:
                 if builder is None:
                     continue
@@ -849,6 +877,25 @@ def _build_srt203(r: dict) -> SrCustom203:
             obj.event_time = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
         except Exception:
             pass
+    return obj
+
+
+def _build_srt205(r: dict) -> SrCustom205:
+    """Build LBS subrecord (discussion 18)."""
+    obj = SrCustom205()
+    obj.serving_cell_id = _safe_int(r.get("serving_cell_id"))
+    obj.lac_tac = _safe_int(r.get("lac_tac"))
+    obj.mcc = _safe_int(r.get("mcc"))
+    obj.mnc = _safe_int(r.get("mnc"))
+    obj.rssi_dbm = _safe_int(r.get("rssi_dbm"))
+    obj.timing_advance = _safe_int(r.get("timing_advance"))
+    obj.bs_lat = _safe_float(r.get("bs_lat"))
+    obj.bs_lon = _safe_float(r.get("bs_lon"))
+    obj.raw_lbs_lat = _safe_float(r.get("raw_lbs_lat"))
+    obj.raw_lbs_lon = _safe_float(r.get("raw_lbs_lon"))
+    obj.lbs_quality = _safe_int(r.get("lbs_quality"))
+    obj.technology = _safe_int(r.get("technology"))
+    # neighbors parsing omitted for simplicity (string "id:rssi;...")
     return obj
 
 

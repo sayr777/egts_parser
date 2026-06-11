@@ -73,40 +73,42 @@ def generate_synthetic_lbs( true_lat: float, true_lon: float, noise: float = 0.8
 
 def lbs_likelihood(road_point: Tuple[float, float], lbs_data: Dict) -> float:
     """
-    Compute how likely the road_point is given the LBS measurements.
-    Simple model:
-    - Distance to serving BS should be close to TA * 550m
-    - RSSI should match expected path loss
-    Higher = better.
+    Improved LBS likelihood (discussion 18 continuation).
+    - Okumura-Hata simplified urban path loss.
+    - TA + RSSI fusion.
+    - Multiple stations (serving + neighbors).
     """
     plat, plon = road_point
-    serving = lbs_data["serving"]
-    if not serving:
-        return 0.0
+    serving = lbs_data.get("serving", {})
+    if not serving or not serving.get("lat"):
+        return 0.01
 
-    # Distance to serving BS
-    dist_to_bs = haversine(plat, plon, serving["lat"], serving["lon"])
+    def path_loss(dist_m: float, freq_mhz: float = 900.0) -> float:
+        if dist_m < 1: dist_m = 1
+        return 69.55 + 26.16 * math.log10(freq_mhz) - 13.82 * math.log10(50) + (44.9 - 6.55 * math.log10(50)) * math.log10(dist_m / 1000.0)
 
-    # TA-based distance
-    expected_dist_from_ta = serving["ta"] * 550.0
-    ta_error = abs(dist_to_bs - expected_dist_from_ta)
-    ta_likelihood = math.exp( - (ta_error ** 2) / (2 * (550 * 1.5) ** 2) )   # sigma ~ 1.5 TA units
+    total = 1.0
 
-    # RSSI likelihood (very rough)
-    expected_rssi = -70 - (dist_to_bs / 180.0)
-    rssi_error = abs(serving["rssi_dbm"] - expected_rssi)
-    rssi_likelihood = math.exp( - (rssi_error ** 2) / (2 * 6 ** 2) )
+    # Serving cell
+    dist = haversine(plat, plon, serving["lat"], serving["lon"])
+    exp_rssi = -path_loss(dist)
+    rssi_err = abs(serving.get("rssi_dbm", -70) - exp_rssi)
+    total *= math.exp( - (rssi_err ** 2) / (2 * 8**2) )
 
-    # Bonus if we are on a "reasonable" road direction relative to BS (optional)
-    total = ta_likelihood * rssi_likelihood
+    ta = serving.get("ta", 0)
+    exp_ta = ta * 550.0
+    ta_err = abs(dist - exp_ta)
+    total *= math.exp( - (ta_err ** 2) / (2 * (550 * 1.2)**2) )
 
-    # Add small contribution from neighbors
+    # Neighbors
     for nb in lbs_data.get("neighbors", []):
+        if not nb.get("lat"): continue
         d = haversine(plat, plon, nb["lat"], nb["lon"])
-        nb_error = abs(d - (nb["ta"] * 550 if nb["ta"] > 0 else 800))
-        total *= math.exp( - (nb_error ** 2) / (2 * 800**2) )
+        e = -path_loss(d)
+        err = abs(nb.get("rssi_dbm", -80) - e)
+        total *= math.exp( - (err ** 2) / (2 * 10**2) )
 
-    return max(0.01, total)
+    return max(0.001, min(1.0, total))
 
 
 def lbs_aware_snap_to_road(

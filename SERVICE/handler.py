@@ -107,10 +107,30 @@ def handler(event: dict, context=None) -> dict:
     log_summary(pkts, _file_logger)
     _append_packets(pkts)
 
+    # LBS processing example (SRT 205 - discussion 18)
+    lbs_records = []
+    for p in pkts:
+        for sdr in p.body or []:
+            if hasattr(sdr, 'record_data'):
+                for rd in sdr.record_data:
+                    if getattr(rd, 'srt', None) == 205 and hasattr(rd, 'subrecord'):
+                        lbs = rd.subrecord
+                        lbs_info = {
+                            "serving_cell_id": getattr(lbs, 'serving_cell_id', None),
+                            "rssi_dbm": getattr(lbs, 'rssi_dbm', None),
+                            "timing_advance": getattr(lbs, 'timing_advance', None),
+                            "raw_lbs_lat": getattr(lbs, 'raw_lbs_lat', None),
+                            "raw_lbs_lon": getattr(lbs, 'raw_lbs_lon', None),
+                            "neighbors_count": len(getattr(lbs, 'neighbors', []) or []),
+                        }
+                        lbs_records.append(lbs_info)
+                        logging.info("LBS record: %s", lbs_info)  # forward example
+
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
         "count":   len(pkts),
         "packets": [p.to_dict() for p in pkts],
+        "lbs_records": lbs_records,  # LBS forwarding
     })
 
 
@@ -169,7 +189,7 @@ def _sdr_from_dict(d: dict):
         SrAdSensorsData, SrAbsCntrData, SrTermIdentity,
         SrRecordResponse, SrResultCode, SrAuthInfo,
         SrExtPosData, SrCountersData, SrPassengersCounters,
-        SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrRaw,
+        SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom205, SrRaw,
     )
     from egts.const import (
         SRT_POS_DATA, SRT_STATE_DATA, SRT_STATE_OR_ACCEL,
@@ -177,7 +197,7 @@ def _sdr_from_dict(d: dict):
         SRT_TERM_IDENTITY, SRT_RECORD_RESPONSE, SRT_RESULT_CODE,
         SRT_AUTH_INFO, SRT_EXT_POS_DATA, SRT_COUNTERS_DATA,
         SRT_PASSENGERS_COUNTERS, SRT_CUSTOM_200, SRT_CUSTOM_201,
-        SRT_CUSTOM_202, SRT_CUSTOM_203,
+        SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_205,
     )
 
     sdr = ServiceDataRecord(
@@ -208,6 +228,7 @@ def _sdr_from_dict(d: dict):
         SRT_CUSTOM_201:          SrCustom201,
         SRT_CUSTOM_202:          SrCustom202,
         SRT_CUSTOM_203:          SrCustom203,
+        SRT_CUSTOM_205:          SrCustom205,  # LBS (base stations) for road graph positioning (discussion 18)
     }
 
     for rd_dict in d.get("RD", []):
