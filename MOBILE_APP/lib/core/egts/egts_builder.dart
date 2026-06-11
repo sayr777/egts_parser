@@ -71,6 +71,21 @@ class EgtsBuilder {
         triggerLabel: 'WiFi:${wifi.ssid}',
       );
 
+  /// Строит пакет EGTS только с LBS-данными (режим LBS-исследования).
+  static Uint8List buildLbsPacket({
+    required LbsEvent lbs,
+    required GpsData gps,
+    required int terminalId,
+    required int packetId,
+  }) =>
+      _buildPacket(
+        gps: gps, lbs: lbs,
+        srt202: _buildSrt202Lbs(lbs),
+        srt203: _buildSrt203(eventType: 1, zoneId: lbs.cellId, ts: gps.ts),
+        terminalId: terminalId, packetId: packetId,
+        triggerLabel: 'LBS:${lbs.cellId}',
+      );
+
   /// Декодирует пакет в читаемую структуру для отображения в UI.
   static Map<String, dynamic> decode(Uint8List packet) {
     if (packet.length < 11) return {'error': 'too short'};
@@ -115,6 +130,8 @@ class EgtsBuilder {
       subrecords.addAll(_subrecord(17, _buildExtPosData(gps)));
     }
     subrecords.addAll(_subrecord(21, _buildStateData()));
+    // LBS субзапись (тип 103) — ВСЕГДА присутствует в пакете
+    subrecords.addAll(_subrecord(103, _buildLbsData(lbs)));
     subrecords.addAll(_subrecord(202, srt202));
     subrecords.addAll(_subrecord(203, srt203));
 
@@ -187,6 +204,29 @@ class EgtsBuilder {
     buf.setUint16(4, 0, Endian.little);
     buf.setUint16(6, 0, Endian.little);
     buf.setInt8(8, 0);
+    return buf.buffer.asUint8List();
+  }
+
+  // LBS субзапись (тип 103): MCC(2)+MNC(2)+LAC(2)+CID(4)+RSSI(1) = 11 байт
+  static Uint8List _buildLbsData(LbsEvent? lbs) {
+    final buf = ByteData(11);
+    if (lbs != null) {
+      buf.setUint16(0, lbs.mcc.clamp(0, 0xFFFF), Endian.little);
+      buf.setUint16(2, lbs.mnc.clamp(0, 0xFFFF), Endian.little);
+      buf.setUint16(4, lbs.lac.clamp(0, 0xFFFF), Endian.little);
+      buf.setUint32(6, lbs.cellId.clamp(0, 0xFFFFFFFF), Endian.little);
+      buf.setInt8(10, lbs.rssi.clamp(-128, 127));
+    }
+    return buf.buffer.asUint8List();
+  }
+
+  // SRT202 для LBS-пакета (идентификатор по cellId)
+  static Uint8List _buildSrt202Lbs(LbsEvent lbs) {
+    final buf = ByteData(9);
+    buf.setUint32(0, lbs.cellId & 0xFFFFFFFF, Endian.little);
+    buf.setUint16(4, lbs.lac & 0xFFFF, Endian.little);
+    buf.setUint16(6, lbs.mcc & 0xFFFF, Endian.little);
+    buf.setInt8(8, lbs.rssi.clamp(-128, 127));
     return buf.buffer.asUint8List();
   }
 

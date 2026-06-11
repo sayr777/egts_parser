@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:latlong2/latlong.dart';
 
 // ─── Whitelist entries ────────────────────────────────────────────────────────
 
@@ -172,6 +173,14 @@ class EgtsPacketInfo {
     triggerType: triggerType, triggerId: triggerId,
     sent: sent ?? this.sent, sendError: sendError ?? this.sendError, ts: ts,
   );
+}
+
+// ─── Marker for survey map ────────────────────────────────────────────────────
+
+class MarkerState {
+  final LatLng position;
+  final bool userAdjusted;
+  const MarkerState({required this.position, this.userAdjusted = false});
 }
 
 // ─── Server config ────────────────────────────────────────────────────────────

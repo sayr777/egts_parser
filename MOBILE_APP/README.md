@@ -9,24 +9,26 @@ EGTS-пакет на сервер (Yandex Cloud Function).
 ## Экраны
 
 ### Мониторинг (4 вкладки)
-| Вкладка | Что отображается |
-|---------|-----------------|
+
+| Вкладка     | Что отображается                                                 |
+| ----------- | ---------------------------------------------------------------- |
 | **События** | Лента EGTS-пакетов с декодированной структурой (разворачивается) |
-| **NFC** | Все считанные NFC/RFID метки, отметка ✓ если в белом списке |
-| **iBeacon** | Обнаруженные BLE маяки с RSSI и расстоянием |
-| **WiFi** | Точки доступа с SSID, BSSID, уровнем сигнала |
+| **NFC**     | Все считанные NFC/RFID метки, отметка ✓ если в белом списке     |
+| **iBeacon** | Обнаруженные BLE маяки с RSSI и расстоянием                      |
+| **WiFi**    | Точки доступа с SSID, BSSID, уровнем сигнала                     |
 
 - Строка статуса: GPS-координата, количество спутников, статус последней отправки
 - Кнопка старт/стоп сканирования
 
 ### Настройки
-| Секция | Описание |
-|--------|---------|
-| **Сервер EGTS** | URL Yandex Cloud Function, IAM-токен, Terminal ID |
-| **Принципы формирования** | Правила: NFC/iBeacon/WiFi → EGTS |
-| **Белый список NFC** | Список UID-тегов. Добавить/удалить (свайп влево) |
-| **Белый список iBeacon** | UUID + Major + Minor (* = любой) |
-| **Белый список WiFi** | SSID и/или BSSID точек доступа |
+
+| Секция                    | Описание                                          |
+| ------------------------- | ------------------------------------------------- |
+| **Сервер EGTS**           | URL Yandex Cloud Function, IAM-токен, Terminal ID |
+| **Принципы формирования** | Правила: NFC/iBeacon/WiFi → EGTS                  |
+| **Белый список NFC**      | Список UID-тегов. Добавить/удалить (свайп влево)  |
+| **Белый список iBeacon**  | UUID + Major + Minor (* = любой)                  |
+| **Белый список WiFi**     | SSID и/или BSSID точек доступа                    |
 
 ## Логика формирования EGTS-пакета
 
@@ -88,23 +90,23 @@ flutter build apk --release
 
 ## Зависимости
 
-| Пакет | Назначение |
-|-------|-----------|
-| `flutter_nfc_kit` | NFC/RFID (все типы тегов) |
-| `flutter_blue_plus` | BLE сканирование → iBeacon парсинг |
-| `wifi_scan` | WiFi AP сканирование |
-| `geolocator` | GPS/ГЛОНАСС (без Google Play Services) |
-| `provider` | State management |
-| `shared_preferences` | Хранение белых списков |
-| `http` | HTTP POST на Cloud Function |
-| `flutter_slidable` | Свайп-удаление в списках |
+| Пакет                | Назначение                             |
+| -------------------- | -------------------------------------- |
+| `flutter_nfc_kit`    | NFC/RFID (все типы тегов)              |
+| `flutter_blue_plus`  | BLE сканирование → iBeacon парсинг     |
+| `wifi_scan`          | WiFi AP сканирование                   |
+| `geolocator`         | GPS/ГЛОНАСС (без Google Play Services) |
+| `provider`           | State management                       |
+| `shared_preferences` | Хранение белых списков                 |
+| `http`               | HTTP POST на Cloud Function            |
+| `flutter_slidable`   | Свайп-удаление в списках               |
 
 ## Разрешения Android
 
-| Разрешение | Назначение |
-|------------|------------|
-| `ACCESS_FINE_LOCATION` | GPS + BLE сканирование |
-| `BLUETOOTH_SCAN` | Поиск iBeacon (Android 12+) |
-| `NFC` | RFID/NFC считывание |
-| `ACCESS_WIFI_STATE` | WiFi сканирование |
-| `FOREGROUND_SERVICE` | Фоновая работа |
+| Разрешение             | Назначение                  |
+| ---------------------- | --------------------------- |
+| `ACCESS_FINE_LOCATION` | GPS + BLE сканирование      |
+| `BLUETOOTH_SCAN`       | Поиск iBeacon (Android 12+) |
+| `NFC`                  | RFID/NFC считывание         |
+| `ACCESS_WIFI_STATE`    | WiFi сканирование           |
+| `FOREGROUND_SERVICE`   | Фоновая работа              |

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:wifi_scan/wifi_scan.dart';
 import 'package:egts_tracker/core/egts/egts_builder.dart';
-import 'package:egts_tracker/core/egts/egts_client.dart';
+import 'package:egts_tracker/core/egts/egts_client.dart' show EgtsClient, SendResult;
 import 'package:egts_tracker/core/prefs/app_prefs.dart';
 import 'package:egts_tracker/models/models.dart';
 
@@ -68,6 +70,12 @@ class TrackerProvider extends ChangeNotifier {
   StreamSubscription<Position>? _gpsSub;
   StreamSubscription<List<ScanResult>>? _bleSub;
   Timer? _wifiTimer;
+  Timer? _lbsTimer;
+
+  static const _lbsChannel = MethodChannel('lbs');
+
+  final List<LbsEvent> _lbsCells = [];
+  List<LbsEvent> get lbsCells => List.unmodifiable(_lbsCells);
 
   // ─── Start / Stop ────────────────────────────────────────────────────────
 
@@ -80,6 +88,7 @@ class TrackerProvider extends ChangeNotifier {
     await _startGps();
     await _startBle();
     _startWifiPoll();
+    _startLbsPoll();
   }
 
   void stopScanning() {
@@ -88,6 +97,7 @@ class TrackerProvider extends ChangeNotifier {
     _gpsSub?.cancel();
     _bleSub?.cancel();
     _wifiTimer?.cancel();
+    _lbsTimer?.cancel();
     FlutterBluePlus.stopScan();
     notifyListeners();
   }
@@ -165,6 +175,37 @@ class TrackerProvider extends ChangeNotifier {
     _scanWifi();
     _wifiTimer = Timer.periodic(const Duration(seconds: 15), (_) => _scanWifi());
   }
+
+  // ─── LBS cell towers ──────────────────────────────────────────────────────
+
+  void _startLbsPoll() {
+    _scanLbs();
+    _lbsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _scanLbs());
+  }
+
+  Future<void> _scanLbs() async {
+    try {
+      final raw = await _lbsChannel.invokeMethod<List>('getCellInfo');
+      if (raw == null) return;
+      _lbsCells.clear();
+      for (final item in raw) {
+        final m = Map<String, dynamic>.from(item as Map);
+        _lbsCells.add(LbsEvent(
+          mcc:    (m['mcc']  as int?) ?? 0,
+          mnc:    (m['mnc']  as int?) ?? 0,
+          lac:    (m['lac']  as int?) ?? 0,
+          cellId: (m['cid']  as int?) ?? 0,
+          rssi:   (m['rssi'] as int?) ?? 0,
+        ));
+      }
+      if (_lbsCells.isNotEmpty) _lastLbs = _lbsCells.first;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('LBS scan error: $e');
+    }
+  }
+
+  Future<void> refreshLbs() => _scanLbs();
 
   Future<void> _scanWifi() async {
     try {
@@ -285,6 +326,80 @@ class TrackerProvider extends ChangeNotifier {
         ? 'Отправлено: $triggerType $triggerId'
         : 'Ошибка: ${result.error}';
     notifyListeners();
+  }
+
+  // ─── Survey (manual send from map) ───────────────────────────────────────
+
+  /// Отправляет пакет с переопределённой координатой (с карты).
+  Future<SendResult> sendSurveyPacket({
+    required LatLng markerPos,
+    NfcEvent?    nfc,
+    BeaconEvent? beacon,
+    WifiEvent?   wifi,
+    LbsEvent?    lbs,
+  }) async {
+    // GPS с координатой маркера (исследователь мог сместить)
+    final gps = GpsData(
+      lat: markerPos.latitude, lon: markerPos.longitude,
+      alt: _gps.alt, speedKmh: 0, courseDeg: 0,
+      satellites: _gps.satellites, hdop: _gps.hdop,
+      accuracy: _gps.accuracy, isValid: true,
+      ts: DateTime.now(),
+    );
+
+    final pid = ++_packetCounter;
+    late final Uint8List bytes;
+    late final String triggerType;
+    late final String triggerId;
+
+    if (nfc != null) {
+      bytes = EgtsBuilder.buildNfcPacket(
+          nfc: nfc, gps: gps, lbs: _lastLbs,
+          terminalId: _serverConfig.terminalId, packetId: pid);
+      triggerType = 'nfc'; triggerId = nfc.uid;
+    } else if (beacon != null) {
+      bytes = EgtsBuilder.buildBeaconPacket(
+          beacon: beacon, gps: gps, lbs: _lastLbs,
+          terminalId: _serverConfig.terminalId, packetId: pid);
+      triggerType = 'beacon';
+      triggerId = '${beacon.uuid}/${beacon.major}/${beacon.minor}';
+    } else if (wifi != null) {
+      bytes = EgtsBuilder.buildWifiPacket(
+          wifi: wifi, gps: gps, lbs: _lastLbs,
+          terminalId: _serverConfig.terminalId, packetId: pid);
+      triggerType = 'wifi'; triggerId = wifi.ssid;
+    } else if (lbs != null) {
+      bytes = EgtsBuilder.buildLbsPacket(
+          lbs: lbs, gps: gps,
+          terminalId: _serverConfig.terminalId, packetId: pid);
+      triggerType = 'lbs'; triggerId = '${lbs.cellId}';
+    } else {
+      return const SendResult(success: false, error: 'Нет данных для отправки');
+    }
+
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2,'0')).join().toUpperCase();
+    final decoded = EgtsBuilder.decode(bytes);
+    var info = EgtsPacketInfo(
+      bytes: bytes, hexStr: hex, decoded: decoded,
+      triggerType: triggerType, triggerId: triggerId,
+      ts: DateTime.now(),
+    );
+    _packets.insert(0, info);
+    if (_packets.length > 100) _packets.removeLast();
+    notifyListeners();
+
+    final result = await EgtsClient(_serverConfig).send(bytes);
+    final idx = _packets.indexWhere(
+        (p) => p.ts == info.ts && p.triggerId == info.triggerId);
+    if (idx >= 0) {
+      _packets[idx] = _packets[idx].copyWith(
+          sent: result.success, sendError: result.error);
+    }
+    _statusMsg = result.success
+        ? 'Отправлено [$triggerType] $triggerId'
+        : 'Ошибка: ${result.error}';
+    notifyListeners();
+    return result;
   }
 
   // ─── Settings update ──────────────────────────────────────────────────────
