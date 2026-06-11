@@ -37,6 +37,9 @@
 | 11 | [11-postgis-map-matching.md](./11-postgis-map-matching.md) | PostGIS Map Matching для EGTS RTLS |
 | 12 | [12-flutter-imu-integration.md](./12-flutter-imu-integration.md) | Интеграция IMU в Flutter-приложение (Dart) |
 | 13 | [13-sensor-fusion-architecture.md](./13-sensor-fusion-architecture.md) | Sensor Fusion: Madgwick → EKF → Map Matching |
+| 14 | [14-ekf-implementation.md](./14-ekf-implementation.md) | EKF реализация (Python) — GPS + IMU fusion, SRT 204 |
+| 15 | [15-map-matching-algorithms.md](./15-map-matching-algorithms.md) | Алгоритмы Map Matching: HMM, Particle Filter, библиотеки |
+| 16 | [16-madgwick-filter-implementation.md](./16-madgwick-filter-implementation.md) | Madgwick Filter — реализация (Python + Dart/Flutter) |
 
 ## Черновики и ТЗ
 
