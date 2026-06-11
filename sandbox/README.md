@@ -30,7 +30,9 @@ python madgwick.py          # standalone Madgwick test
 python ekf.py               # EKF with synthetic data
 python fusion_pipeline.py   # full Madgwick + EKF pipeline
 python map_matcher.py       # geometric snap + example track
+python lbs_map_matcher.py   # LBS (base stations) + road graph snap (new)
 python srt204.py            # SRT 204 model encode/decode roundtrip
+python srt205_lbs.py        # SRT 205 LBS data model (new)
 ```
 
 ## Mapping to Discussions (все дискурсии)
@@ -53,6 +55,10 @@ python srt204.py            # SRT 204 model encode/decode roundtrip
 | **15-map-matching-algorithms.md**      | HMM/Viterbi vs geometric vs Particle, libraries  | map_matcher.py (simple + stubs)       |
 | **16-madgwick-filter-implementation.md**| **Full MadgwickFilter** (MARG + IMU-only, β, Euler) | **madgwick.py**                   |
 | **17-geopandas-map-matching.md**       | Prototyping with GeoPandas + OSMnx + leuven      | map_matcher.py (GeoPandas stub section)|
+| **18-lbs-road-graph-positioning.md**   | LBS (cellular base stations) + road graph for precise on-road location | **lbs_map_matcher.py** (LBS likelihood + lbs_aware_snap_to_road) |
+|                                        | Synthetic LBS data (serving + neighbors + TA + RSSI) | `generate_synthetic_lbs()` inside the same file |
+|                                        | SRT 205 model for LBS data in EGTS packets         | **srt205_lbs.py** |
+|                                        | LBS integrated into sensor fusion + demo           | generate_data.py, fusion_pipeline.py, demo.py |
 | RTLS_v2_full_draft.md                  | High-level TЗ skeleton                           | This sandbox is the living implementation draft |
 
 ## Current Implementation Status vs Discussions
@@ -65,14 +71,21 @@ python srt204.py            # SRT 204 model encode/decode roundtrip
 
 **This sandbox** implements the **exact proposals** from the discussions as clean, dependency-light Python modules (numpy + scipy + stdlib for core path).
 
+LBS (cellular base stations) + road graph positioning (discussion 18) is fully prototyped:
+- `lbs_map_matcher.py`: likelihood-based snapping using TA/RSSI + known BS locations.
+- `srt205_lbs.py`: EGTS SRT 205 model for transmitting LBS data.
+- Integrated into `fusion_pipeline.py` (process_imu accepts lbs_data and snaps to road) and `demo.py`/`generate_data.py`.
+- Pipeline now combines IMU + GPS + LBS for road-accurate position.
+
 ## Next steps (from the discussions themselves)
 
-1. Move mature classes into `SERVICE/egts/filters/` and `models.py` (SRT 204).
-2. Extend codec.py registration for SRT 204.
-3. Add to Excel parser (new sheets).
-4. Wire real IMU from Flutter app (sensors_plus) → send SRT 204.
-5. Production map matching: PostGIS + pgRouting (or pgMapMatch).
-6. Fill `DOCS/TZ_EGTS_RTLS_v2.docx` + regenerate RTLS_v2_full_draft.md from this sandbox + discussions.
+1. Move mature classes into `SERVICE/egts/filters/` and `models.py` (SRT 204 + new SRT 205 for LBS).
+2. Extend codec.py registration for SRT 204/205.
+3. Add to Excel parser (new INERTIAL and LBS sheets).
+4. Wire real IMU + cellular (LBS) from Flutter app → send SRT 204/205.
+5. Production map matching with LBS: PostGIS + pgRouting + LBS likelihood (extend 11/15/18).
+6. Fill `DOCS/TZ_EGTS_RTLS_v2.docx` + regenerate RTLS_v2_full_draft.md from this sandbox + discussions (LBS section already added).
+7. Test LBS + road graph snapping in real РНИС conditions (weak GNSS scenarios).
 
 ## Synthetic Data
 

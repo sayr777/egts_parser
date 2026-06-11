@@ -72,9 +72,10 @@
 | 15 | [15-map-matching-algorithms.md](./15-map-matching-algorithms.md) | Сравнение алгоритмов (Geometric / Topological / HMM+Viterbi / Particle Filter) + библиотеки | `map_matcher.py` (сравнение + stubs) |
 | 16 | [16-madgwick-filter-implementation.md](./16-madgwick-filter-implementation.md) | Полная MadgwickFilter (MARG + IMU-only, β-тюнинг, Euler) | `madgwick.py` (полная чистая реализация) |
 | 17 | [17-geopandas-map-matching.md](./17-geopandas-map-matching.md) | Прототипирование Map Matching с GeoPandas + OSMnx + leuven | `map_matcher.py` (GeoPandas-раздел + примеры) |
+| 18 | [18-lbs-road-graph-positioning.md](./18-lbs-road-graph-positioning.md) | Позиционирование по LBS (базовым станциям сотовой связи) + граф дорог для точной точки на дороге | `lbs_map_matcher.py`, `srt205_lbs.py`, integrated in `fusion_pipeline.py` + `demo.py` (full LBS + IMU + GPS snapping) |
 
-**Ключевой результат серии (08–17):**  
-Чёткая многоуровневая архитектура + готовые прототипы кода, которые можно переносить в `SERVICE/egts/filters/`, мобильное приложение и Excel-парсер.
+**Ключевой результат серии (08–18):**  
+Чёткая многоуровневая архитектура + готовые прототипы кода (в sandbox/), которые можно переносить в `SERVICE/egts/filters/`, мобильное приложение и Excel-парсер. LBS + road graph snapping (18) теперь работает вместе с IMU/EKF для точной дороги даже без GNSS.
 
 ## Черновики и ТЗ
 

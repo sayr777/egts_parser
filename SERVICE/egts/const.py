@@ -41,6 +41,7 @@ SRT_CUSTOM_200          = 200
 SRT_CUSTOM_201          = 201
 SRT_CUSTOM_202          = 202
 SRT_CUSTOM_203          = 203
+SRT_CUSTOM_205          = 205  # LBS (base stations) data for road graph positioning (discussion 18)
 
 SRT_NAMES: dict[int, str] = {
     SRT_RECORD_RESPONSE:     "EGTS_SR_RECORD_RESPONSE",
@@ -67,6 +68,7 @@ SRT_NAMES: dict[int, str] = {
     SRT_CUSTOM_201:          "EGTS_SR_CUSTOM_SRT201",
     SRT_CUSTOM_202:          "EGTS_SR_CUSTOM_SRT202",
     SRT_CUSTOM_203:          "EGTS_SR_CUSTOM_SRT203",
+    SRT_CUSTOM_205:          "EGTS_SR_CUSTOM_SRT205",  # LBS data
 }
 
 PT_NAMES: dict[int, str] = {

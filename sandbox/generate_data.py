@@ -102,3 +102,39 @@ if __name__ == "__main__":
     print("  points:", len(track["t"]))
     print("  GPS fixes:", len(track["gps_lat"]))
     print("  sample true heading range:", track["true_heading"].min(), "→", track["true_heading"].max())
+
+
+# ------------------------------------------------------------------
+# LBS data generation (new for discussion 18)
+# ------------------------------------------------------------------
+from lbs_map_matcher import generate_synthetic_lbs, DEMO_BASE_STATIONS
+
+
+def add_lbs_to_track(track: dict, noise: float = 1.0) -> dict:
+    """
+    Add synthetic LBS measurements for each point in the track.
+    Returns the track dict with additional 'lbs' list.
+    """
+    lbs_list = []
+    for i in range(len(track["t"])):
+        lat = track["true_lat"][i]
+        lon = track["true_lon"][i]
+        lbs = generate_synthetic_lbs(lat, lon, noise=noise)
+        lbs_list.append(lbs)
+    track["lbs"] = lbs_list
+    track["lbs_base_stations"] = DEMO_BASE_STATIONS
+    return track
+
+
+if __name__ == "__main__":
+    seeds = load_real_gps_seeds()
+    track = generate_synthetic_track(seeds or [], duration_s=5.0)
+    track = add_lbs_to_track(track, noise=1.2)
+
+    print("\nLBS data added (discussion 18):")
+    print("  LBS samples:", len(track["lbs"]))
+    first = track["lbs"][0]
+    print("  Example serving cell:", first["serving"]["cell_id"],
+          "TA:", first["serving"]["ta"],
+          "RSSI:", first["serving"]["rssi_dbm"])
+    print("  Raw LBS pos (noisy):", round(first["raw_lbs_lat"], 5), round(first["raw_lbs_lon"], 5))

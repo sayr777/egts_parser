@@ -13,7 +13,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, List
 
 from .const import EPOCH, RESULT_CODES, SRT_NAMES, SVC_NAMES, SRT_CUSTOM_200, SRT_CUSTOM_201, SRT_CUSTOM_202, SRT_CUSTOM_203
 
@@ -953,6 +953,111 @@ class SrCustom203(_Subrecord):
             "event_flags": f"{self.event_flags:#04x}",
             "raw_hex": self.raw_hex,
         }
+
+
+# ---------------------------------------------------------------------------
+# SRT 205 — LBS (cellular base stations) data for road graph positioning
+# (from discussion 18: using stations + road graph to find exact point on road)
+# ---------------------------------------------------------------------------
+@dataclass
+class NeighborCell:
+    cell_id: int = 0
+    rssi_dbm: int = 0
+
+
+@dataclass
+class SrCustom205(_Subrecord):
+    """LBS data: serving cell + TA + RSSI + neighbors for map-matching to road graph."""
+    SRT: int = field(default=205, init=False, repr=False)
+
+    serving_cell_id: int = 0
+    lac_tac: int = 0
+    mcc: int = 0
+    mnc: int = 0
+    rssi_dbm: int = 0
+    timing_advance: int = 0
+    bs_lat: float = 0.0
+    bs_lon: float = 0.0
+    neighbors: List[NeighborCell] = field(default_factory=list)
+    raw_lbs_lat: float = 0.0
+    raw_lbs_lon: float = 0.0
+    lbs_quality: int = 0
+    technology: int = 0
+    flags: int = 0
+    timestamp: int = 0
+    raw_hex: str = ""
+
+    _raw_bytes: bytes = field(default=b"", repr=False)
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d.pop("_raw_bytes", None)
+        d["neighbors"] = [asdict(n) for n in self.neighbors]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        known = {k for k in cls.__dataclass_fields__ if k not in ("SRT", "_raw_bytes")}
+        filtered = {k: v for k, v in d.items() if k in known}
+        if "neighbors" in filtered:
+            filtered["neighbors"] = [NeighborCell(**n) if isinstance(n, dict) else n
+                                     for n in filtered["neighbors"]]
+        return cls(**filtered)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "SrCustom205":
+        obj = cls(raw_hex=data.hex().upper())
+        if len(data) < 30:
+            return obj
+        off = 0
+        obj.serving_cell_id = struct.unpack_from("<I", data, off)[0]; off += 4
+        obj.lac_tac = struct.unpack_from("<H", data, off)[0]; off += 2
+        obj.mcc = struct.unpack_from("<H", data, off)[0]; off += 2
+        obj.mnc = struct.unpack_from("<H", data, off)[0]; off += 2
+        obj.rssi_dbm = struct.unpack_from("<b", data, off)[0]; off += 1
+        obj.timing_advance = struct.unpack_from("<H", data, off)[0]; off += 2
+        blat, blon = struct.unpack_from("<ii", data, off); off += 8
+        obj.bs_lat = blat / 1e7
+        obj.bs_lon = blon / 1e7
+        num_n = data[off]; off += 1
+        for _ in range(min(num_n, 8)):
+            if off + 5 > len(data): break
+            cid = struct.unpack_from("<I", data, off)[0]; off += 4
+            r = struct.unpack_from("<b", data, off)[0]; off += 1
+            obj.neighbors.append(NeighborCell(cid, r))
+        if off + 8 <= len(data):
+            rlat, rlon = struct.unpack_from("<ii", data, off); off += 8
+            obj.raw_lbs_lat = rlat / 1e7
+            obj.raw_lbs_lon = rlon / 1e7
+        if off + 7 <= len(data):
+            obj.lbs_quality = data[off]; off += 1
+            obj.technology = data[off]; off += 1
+            obj.flags = data[off]; off += 1
+            obj.timestamp = struct.unpack_from("<I", data, off)[0]
+        return obj
+
+    def to_bytes(self) -> bytes:
+        out = struct.pack("<IHHH", self.serving_cell_id, self.lac_tac, self.mcc, self.mnc)
+        out += struct.pack("<bH", self.rssi_dbm, self.timing_advance)
+        blat = int(self.bs_lat * 1e7)
+        blon = int(self.bs_lon * 1e7)
+        out += struct.pack("<ii", blat, blon)
+        num_n = min(len(self.neighbors), 8)
+        out += bytes([num_n])
+        for n in self.neighbors[:num_n]:
+            out += struct.pack("<Ib", n.cell_id, n.rssi_dbm)
+        rlat = int(self.raw_lbs_lat * 1e7)
+        rlon = int(self.raw_lbs_lon * 1e7)
+        out += struct.pack("<ii", rlat, rlon)
+        out += struct.pack("<BBBBI",
+                           self.lbs_quality & 0xFF,
+                           self.technology & 0xFF,
+                           self.flags & 0xFF,
+                           0,
+                           self.timestamp & 0xFFFFFFFF)
+        self._raw_bytes = out
+        self.raw_hex = out.hex().upper()
+        return out
 
 
 # ---------------------------------------------------------------------------
