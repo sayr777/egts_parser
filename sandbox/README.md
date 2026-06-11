@@ -71,21 +71,22 @@ python srt205_lbs.py        # SRT 205 LBS data model (new)
 
 **This sandbox** implements the **exact proposals** from the discussions as clean, dependency-light Python modules (numpy + scipy + stdlib for core path).
 
-LBS (cellular base stations) + road graph positioning (discussion 18) is fully prototyped:
+LBS (cellular base stations) + road graph positioning (discussion 18) is fully prototyped + ported to real code:
 - `lbs_map_matcher.py`: likelihood-based snapping using TA/RSSI + known BS locations.
-- `srt205_lbs.py`: EGTS SRT 205 model for transmitting LBS data.
-- Integrated into `fusion_pipeline.py` (process_imu accepts lbs_data and snaps to road) and `demo.py`/`generate_data.py`.
-- Pipeline now combines IMU + GPS + LBS for road-accurate position.
+- `srt205_lbs.py` + **real `SERVICE/egts/models.py:SrCustom205`** (with NeighborCell, registered in codec.py and const.py).
+- Integrated into `fusion_pipeline.py` (process_imu accepts lbs_data and uses snap to update EKF for road constraint).
+- `demo.py`/`generate_data.py`: full LBS generation + builds **real EGTS packets** (via SERVICE.codec) containing SRT204 (position/IMU) + SRT205 (LBS). Successful build (114 bytes example with LBS data).
+- Pipeline now combines IMU + GPS + LBS for road-accurate position (LBS snap with conf=0.99 keeps it on graph).
 
 ## Next steps (from the discussions themselves)
 
-1. Move mature classes into `SERVICE/egts/filters/` and `models.py` (SRT 204 + new SRT 205 for LBS).
-2. Extend codec.py registration for SRT 204/205.
-3. Add to Excel parser (new INERTIAL and LBS sheets).
-4. Wire real IMU + cellular (LBS) from Flutter app → send SRT 204/205.
-5. Production map matching with LBS: PostGIS + pgRouting + LBS likelihood (extend 11/15/18).
-6. Fill `DOCS/TZ_EGTS_RTLS_v2.docx` + regenerate RTLS_v2_full_draft.md from this sandbox + discussions (LBS section already added).
-7. Test LBS + road graph snapping in real РНИС conditions (weak GNSS scenarios).
+1. **Done:** SrCustom205 in real `SERVICE/egts/models.py` + codec/const. LBS model ready.
+2. Integrate LBS processing in `SERVICE/handler.py` (log/forward SRT 205).
+3. Add LBS sheet + support in Excel parser (PARSER).
+4. Wire real cellular/LBS from Flutter app → send SRT 205.
+5. Production: PostGIS LBS likelihood for map matching (build on 11/15/18).
+6. Update `DOCS/TZ_EGTS_RTLS_v2.docx` with LBS section.
+7. Full test: LBS + IMU + road graph in weak GNSS scenarios for РНИС.
 
 ## Synthetic Data
 

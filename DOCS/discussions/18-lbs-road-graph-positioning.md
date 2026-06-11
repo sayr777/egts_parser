@@ -196,15 +196,14 @@ CREATE OR REPLACE FUNCTION egts_lbs_map_match(
 
 **Файл создан:** `DOCS/discussions/18-lbs-road-graph-positioning.md`
 
-**Следующие шаги:**  
-Реализовать прототип в `sandbox/` (расширение map_matcher.py + генератор синтетических LBS-данных), затем перенести в основной код. Можно добавить в ТЗ RTLS v2 как важное дополнение для outdoor-навигации.
+**Следующие шаги (обновлено):**  
+- **Реальный код:** SRT 205 (SrCustom205 + NeighborCell) добавлен в `SERVICE/egts/models.py`, `const.py`, зарегистрирован в `codec.py`. Готов к использованию в handler и сборке пакетов.
+- LBS snap теперь обновляет EKF (как GPS measurement) в `fusion_pipeline.py`.
+- В `demo.py` собираются **реальные EGTS-пакеты** (через SERVICE.codec) с SRT204 (позиция+IMU) + SRT205 (LBS от станций). Пример: пакет успешно построен (114 байт).
+- Следующее: добавить обработку SRT 205 в `SERVICE/handler.py`, LBS в Excel-парсер, реальный сбор cellular в мобильном приложении, PostGIS LBS-likelihood.
 
-**Sandbox реализация (продолжение):**  
-- `sandbox/lbs_map_matcher.py`: `generate_synthetic_lbs()`, `lbs_likelihood()`, `lbs_aware_snap_to_road()`.
-- `sandbox/srt205_lbs.py`: Полная модель SRT 205 для передачи LBS в EGTS пакетах (аналог SRT 204).
-- `sandbox/generate_data.py`: `add_lbs_to_track()` — добавляет LBS к синтетическим трекам.
-- `sandbox/fusion_pipeline.py`: `process_imu(..., lbs_data=...)` — теперь использует LBS для road snapping внутри пайплайна (Madgwick + EKF + LBS Map Matching).
-- `sandbox/demo.py`: Полный прогон с генерацией SRT 204 + SRT 205, LBS snaps показаны в выводе (conf 0.99 на дороге).
-- Запуск: `python demo.py` или `python fusion_pipeline.py` (встроен LBS пример).
+**Текущая реализация:**  
+- Sandbox + реальный код полностью покрывают LBS + road graph: генерация данных → likelihood snap → обновление fusion/EKF → передача в EGTS-пакете (SRT 205).
+- LBS позволяет получать точную точку на дороге даже при слабом GNSS, комбинируя с IMU и графом (как описано в дискуссии).
 
-LBS теперь работает как дополнительный сенсор в общей архитектуре fusion (GPS/IMU + LBS → точка на графе дорог).
+LBS теперь интегрирован в пайплайн: GPS/IMU + LBS (станции) → точная road-constrained точка.

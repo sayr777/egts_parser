@@ -116,11 +116,11 @@ IMU (100–200 Hz: accel + gyro + mag)
 - Новый vendor SRT 205 (EGTS_SR_LBS_DATA) или расширение SRT 200/204.
 - Поля: serving_cell_id, lac/tac, rssi, timing_advance, neighbors, raw_lbs_position и т.д.
 
-**Sandbox прототип:** 
-- `lbs_map_matcher.py` — генерация LBS + likelihood snapping.
-- `srt205_lbs.py` — модель SRT 205.
-- Полная интеграция в `fusion_pipeline.py` (process_imu с lbs_data) и `demo.py` (SRT 204 + SRT 205 + LBS snaps в реальном времени).
-- Пример: LBS даёт conf=0.99 на правильном сегменте дороги даже при шуме.
+**Sandbox + реальная реализация:** 
+- `lbs_map_matcher.py` + `srt205_lbs.py`.
+- **Реальный код в SERVICE:** SrCustom205 (с NeighborCell) в models.py, константа в const.py, регистрация в codec.py.
+- Интеграция: `fusion_pipeline.py` принимает lbs_data и использует snap для обновления EKF (как GPS measurement). `demo.py` генерирует реальные EGTS-пакеты (через SERVICE.codec) с SRT204 + SRT205 (LBS).
+- Пример: LBS snap с conf=0.99 даёт точную точку на дороге.
 
 **Рекомендация для ТЗ:** Добавить LBS как важный источник данных для outdoor-навигации в сложных условиях (дополнение к RTLS indoor).
 
