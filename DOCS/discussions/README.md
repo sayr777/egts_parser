@@ -40,6 +40,7 @@
 | 14 | [14-ekf-implementation.md](./14-ekf-implementation.md) | EKF реализация (Python) — GPS + IMU fusion, SRT 204 |
 | 15 | [15-map-matching-algorithms.md](./15-map-matching-algorithms.md) | Алгоритмы Map Matching: HMM, Particle Filter, библиотеки |
 | 16 | [16-madgwick-filter-implementation.md](./16-madgwick-filter-implementation.md) | Madgwick Filter — реализация (Python + Dart/Flutter) |
+| 17 | [17-geopandas-map-matching.md](./17-geopandas-map-matching.md) | GeoPandas + OSMnx: прототипирование Map Matching |
 
 ## Черновики и ТЗ
 
