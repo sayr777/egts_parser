@@ -74,3 +74,7 @@ class EGTS_SR_INERTIAL_DATA:
 ---
 
 **Файл создан:** `DOCS/discussions/08-inertial-sensors-egts.md`
+
+---
+
+**Реализация в sandbox:** `srt204.py` (полная модель SRT 204 + to_bytes / from_bytes / to_dict). См. также `fusion_pipeline.py` и `sandbox/README.md`.

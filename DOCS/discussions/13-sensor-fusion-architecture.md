@@ -205,3 +205,7 @@ send_egts([srt200, srt201, srt202])
 - [08-road-graph-map-matching.md](./08-road-graph-map-matching.md) — теория Map Matching
 - [11-postgis-map-matching.md](./11-postgis-map-matching.md) — реализация на PostGIS
 - [12-flutter-imu-integration.md](./12-flutter-imu-integration.md) — сбор IMU в мобильном приложении
+
+---
+
+**Реализация в sandbox:** `fusion_pipeline.py` (ядро архитектуры Madgwick + EKF), `madgwick.py`, `ekf.py`. Полный сквозной пример — `demo.py`.

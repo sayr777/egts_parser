@@ -48,10 +48,5 @@ egts_parser/
 - Flutter Android app для GPS + BLE + WiFi + NFC.
 - Отправка EGTS-пакетов на Cloud Function.
 
-## Соответствие задачам РНИС
-- Идеально ложится в ingestion БНСО для Пермь/Камчатка/МО.
-- Инструменты для тестирования, валидации, документации (ПМИ, И3.1).
-- RTLS-расширения полезны для Indoor-Outdoor.
-
 ## Рекомендации
 См. файл 02-recommendations-improvements.md
