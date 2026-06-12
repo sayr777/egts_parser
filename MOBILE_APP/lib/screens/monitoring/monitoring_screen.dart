@@ -311,6 +311,30 @@ class _LbsTab extends StatelessWidget {
                 );
               },
             )),
+
+      // ─── IMU snapshot (SRT 204) ─────────────────────────────────────────────
+      if (prov.lastImu != null)
+        Container(
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(children: [
+            const Icon(Icons.sensors, color: Colors.blue),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'IMU: h=${prov.lastImu!.headingDeg.toStringAsFixed(1)}° '
+                'r/p=${prov.lastImu!.rollDeg.toStringAsFixed(1)}/${prov.lastImu!.pitchDeg.toStringAsFixed(1)} '
+                'vib=${prov.lastImu!.vibrationRms.toStringAsFixed(3)}',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ]),
+        ),
     ]);
   }
 }

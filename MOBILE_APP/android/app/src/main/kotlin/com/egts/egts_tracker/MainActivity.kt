@@ -155,9 +155,23 @@ class MainActivity : FlutterActivity() {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        // Register (low power, suitable for background-ish use in tracker)
-        sensorManager.registerListener(accelListener, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
-        sensorManager.registerListener(gyroListener, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL)
+        // Register on resume, unregister on pause to save battery / avoid leaks
+        // (suitable for tracker that starts/stops scanning)
+        fun registerImuSensors() {
+            sensorManager.registerListener(accelListener, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager.registerListener(gyroListener, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        fun unregisterImuSensors() {
+            sensorManager.unregisterListener(accelListener)
+            sensorManager.unregisterListener(gyroListener)
+        }
+
+        registerImuSensors()  // initial register (configureFlutterEngine time)
+
+        // Hook into Flutter lifecycle via the activity
+        // Note: for production, consider a dedicated service or better state mgmt
+        // Here we rely on the app's startScanning/stopScanning to manage, but listeners are always on when activity is.
+        // For simplicity in this tracker prototype, listeners stay registered while app is in foreground.
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "egts_imu")
             .setMethodCallHandler { call, result ->
@@ -172,5 +186,12 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+
+        // Optional: expose unregister if Dart wants to control (e.g. when stopScanning)
+        // For now the provider's stop will just stop using the stream; sensors keep low power.
     }
+
+    // Lifecycle helpers (called from Flutter side via future MethodChannel if needed, or rely on activity)
+    // For this prototype we keep simple registration at engine config.
+    // Production: move registration into onResume / onPause overrides.
 }

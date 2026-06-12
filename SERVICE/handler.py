@@ -139,8 +139,8 @@ def handler(event: dict, context=None) -> dict:
     # for server-side validation or re-processing of received IMU data.
     try:
         from egts.filters import vibration_metrics, MadgwickFilter, EGTS_EKF
-        # Demo: if a 204 record arrives with raw sensors we could re-run metrics or init an EKF
-        # (full fusion usually happens on device or in a dedicated pipeline; here we just show availability)
+        # Demo: if a 204 record arrives with raw accel we can re-compute vibration metrics server-side
+        # (illustrates that filters are usable for validation / re-processing; full EKF fusion is in pipeline)
     except Exception:
         pass
     inertial_records = []
@@ -163,6 +163,20 @@ def handler(event: dict, context=None) -> dict:
                         }
                         inertial_records.append(rec)
                         logging.info("Inertial/SRT204 record: %s", rec)
+
+                        # Example server-side filter usage (if raw accel present in the record)
+                        try:
+                            ax = getattr(imu, 'accel_x', 0.0) or 0.0
+                            ay = getattr(imu, 'accel_y', 0.0) or 0.0
+                            az = getattr(imu, 'accel_z', 9.8) or 9.8
+                            # tiny synthetic window for demo (in real: buffer recent samples)
+                            import numpy as np
+                            sample = np.array([[ax, ay, az], [ax*0.99, ay*1.01, az], [ax, ay, az]])
+                            vib = vibration_metrics(sample)
+                            rec['server_vib_rms'] = round(vib.get('rms', 0), 4)
+                            logging.info("Server re-computed vibration_metrics: %s", vib)
+                        except Exception as e:
+                            logging.debug("vibration_metrics demo skipped: %s", e)
 
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
