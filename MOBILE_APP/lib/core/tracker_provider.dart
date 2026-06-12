@@ -45,6 +45,7 @@ class TrackerProvider extends ChangeNotifier {
   final List<WifiEvent>   _wifiEvents   = [];
   LbsEvent? _lastLbs;
   ImuEvent? _lastImu;
+  double _localHeading = 0.0;  // on-device integrated heading (demo for SRT 204)
 
   List<NfcEvent>    get nfcEvents    => List.unmodifiable(_nfcEvents);
   List<BeaconEvent> get beaconEvents => List.unmodifiable(_beaconEvents);
@@ -233,9 +234,9 @@ class TrackerProvider extends ChangeNotifier {
         final dt = 0.1; // assume ~10 Hz from collector poll
         final gzDeg = imu.gyroZ * (180 / 3.1415926535); // crude rad->deg
         // accumulate (clamped, no magnetometer correction here)
-        final newH = (_lastImu!.headingDeg + gzDeg * dt) % 360.0;
-        // we don't mutate the incoming imu, just use for local state / future packets
-        // (in a real app you would feed this improved heading back into the ImuEvent or a fused state)
+        _localHeading = (_lastImu!.headingDeg + gzDeg * dt) % 360.0;
+      } else {
+        _localHeading = imu.headingDeg;
       }
     });
   }
@@ -247,8 +248,24 @@ class TrackerProvider extends ChangeNotifier {
 
   void sendImuPacket(ImuEvent imu) {
     final pid = ++_packetCounter;
+    // Use on-device integrated heading if available (better than raw for SRT 204)
+    final useImu = _localHeading != 0.0
+        ? ImuEvent(
+            headingDeg: _localHeading,
+            rollDeg: imu.rollDeg,
+            pitchDeg: imu.pitchDeg,
+            accelX: imu.accelX,
+            accelY: imu.accelY,
+            accelZ: imu.accelZ,
+            gyroX: imu.gyroX,
+            gyroY: imu.gyroY,
+            gyroZ: imu.gyroZ,
+            vibrationRms: imu.vibrationRms,
+            ts: imu.ts,
+          )
+        : imu;
     final bytes = EgtsBuilder.buildImuPacket(
-      imu: imu,
+      imu: useImu,
       gps: _gps,
       lbs: _lastLbs,
       terminalId: _serverConfig.terminalId,

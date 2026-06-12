@@ -209,14 +209,18 @@ def handler(event: dict, context=None) -> dict:
             hdg = first_imu.get('heading_deg') or first_imu.get('server_madgwick_heading')
             if lat and lon:
                 ekf.init(lat, lon, hdg or 0.0)
-                # simple predict + update simulation
-                ekf.predict()
-                # In real: ekf.update_gps(...) or custom LBS+IMU update
+                # Real updates from LBS (as GPS) and IMU heading (from Madgwick or raw)
+                ekf.update_gps(lat, lon)
+                if hdg is not None:
+                    ekf.update_heading(np.radians(hdg))
+                ekf.predict()  # one step for demo
+                st = ekf.get_state()
                 fused.append({
-                    "fused_lat": round(ekf.x[0], 6),
-                    "fused_lon": round(ekf.x[1], 6),
-                    "fused_heading": round(np.degrees(ekf.x[4]) if len(ekf.x) > 4 else (hdg or 0), 1),
-                    "source": "LBS_snap + IMU_heading (demo EKF)"
+                    "fused_lat": round(st["lat"], 6),
+                    "fused_lon": round(st["lon"], 6),
+                    "fused_heading": round(st["heading"], 1),
+                    "fused_confidence": round(st["confidence"], 3),
+                    "source": "LBS_snap + IMU_heading (real EKF update_gps + update_heading)"
                 })
                 logging.info("Combined LBS+IMU EKF fusion demo: %s", fused[-1])
         except Exception as e:
