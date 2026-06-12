@@ -273,6 +273,7 @@ class TrackerProvider extends ChangeNotifier {
     final bytes = EgtsBuilder.buildLbsPacket(
       lbs: lbs,
       gps: _gps,
+      imu: _lastImu,
       terminalId: _serverConfig.terminalId,
       packetId: pid,
     );
@@ -383,17 +384,17 @@ class TrackerProvider extends ChangeNotifier {
 
     if (nfc != null) {
       bytes = EgtsBuilder.buildNfcPacket(
-        nfc: nfc, gps: _gps, lbs: _lastLbs,
+        nfc: nfc, gps: _gps, lbs: _lastLbs, imu: _lastImu,
         terminalId: _serverConfig.terminalId, packetId: pid,
       );
     } else if (beacon != null) {
       bytes = EgtsBuilder.buildBeaconPacket(
-        beacon: beacon, gps: _gps, lbs: _lastLbs,
+        beacon: beacon, gps: _gps, lbs: _lastLbs, imu: _lastImu,
         terminalId: _serverConfig.terminalId, packetId: pid,
       );
     } else if (wifi != null) {
       bytes = EgtsBuilder.buildWifiPacket(
-        wifi: wifi, gps: _gps, lbs: _lastLbs,
+        wifi: wifi, gps: _gps, lbs: _lastLbs, imu: _lastImu,
         terminalId: _serverConfig.terminalId, packetId: pid,
       );
     } else {
@@ -437,6 +438,7 @@ class TrackerProvider extends ChangeNotifier {
     BeaconEvent? beacon,
     WifiEvent?   wifi,
     LbsEvent?    lbs,
+    ImuEvent?    imu,
   }) async {
     // GPS с координатой маркера (исследователь мог сместить)
     final gps = GpsData(
@@ -454,25 +456,30 @@ class TrackerProvider extends ChangeNotifier {
 
     if (nfc != null) {
       bytes = EgtsBuilder.buildNfcPacket(
-          nfc: nfc, gps: gps, lbs: _lastLbs,
+          nfc: nfc, gps: gps, lbs: _lastLbs, imu: imu ?? _lastImu,
           terminalId: _serverConfig.terminalId, packetId: pid);
       triggerType = 'nfc'; triggerId = nfc.uid;
     } else if (beacon != null) {
       bytes = EgtsBuilder.buildBeaconPacket(
-          beacon: beacon, gps: gps, lbs: _lastLbs,
+          beacon: beacon, gps: gps, lbs: _lastLbs, imu: imu ?? _lastImu,
           terminalId: _serverConfig.terminalId, packetId: pid);
       triggerType = 'beacon';
       triggerId = '${beacon.uuid}/${beacon.major}/${beacon.minor}';
     } else if (wifi != null) {
       bytes = EgtsBuilder.buildWifiPacket(
-          wifi: wifi, gps: gps, lbs: _lastLbs,
+          wifi: wifi, gps: gps, lbs: _lastLbs, imu: imu ?? _lastImu,
           terminalId: _serverConfig.terminalId, packetId: pid);
       triggerType = 'wifi'; triggerId = wifi.ssid;
     } else if (lbs != null) {
       bytes = EgtsBuilder.buildLbsPacket(
-          lbs: lbs, gps: gps,
+          lbs: lbs, gps: gps, imu: imu ?? _lastImu,
           terminalId: _serverConfig.terminalId, packetId: pid);
       triggerType = 'lbs'; triggerId = '${lbs.cellId}';
+    } else if (imu != null) {
+      bytes = EgtsBuilder.buildImuPacket(
+          imu: imu, gps: gps, lbs: _lastLbs,
+          terminalId: _serverConfig.terminalId, packetId: pid);
+      triggerType = 'imu'; triggerId = 'imu';
     } else {
       return const SendResult(success: false, error: 'Нет данных для отправки');
     }

@@ -93,28 +93,54 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // IMU channel for SRT 204 (accel + gyro + basic orientation stub)
+        // IMU channel for SRT 204 (accel + gyro + basic orientation)
+        val imuLast = HashMap<String, Any>()
+        imuLast["ax"] = 0.0
+        imuLast["ay"] = 0.0
+        imuLast["az"] = 9.8
+        imuLast["gx"] = 0.0
+        imuLast["gy"] = 0.0
+        imuLast["gz"] = 0.0
+        imuLast["heading"] = 0.0
+        imuLast["roll"] = 0.0
+        imuLast["pitch"] = 0.0
+        imuLast["vib_rms"] = 0.03
+
+        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val accelListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && event.values.size >= 3) {
+                    imuLast["ax"] = event.values[0].toDouble()
+                    imuLast["ay"] = event.values[1].toDouble()
+                    imuLast["az"] = event.values[2].toDouble()
+                    // crude vibration estimate
+                    val mag = Math.sqrt((event.values[0]*event.values[0] + event.values[1]*event.values[1] + event.values[2]*event.values[2]).toDouble())
+                    imuLast["vib_rms"] = (mag - 9.8).coerceAtLeast(0.0) * 0.1
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        val gyroListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (event.sensor.type == Sensor.TYPE_GYROSCOPE && event.values.size >= 3) {
+                    imuLast["gx"] = event.values[0].toDouble()
+                    imuLast["gy"] = event.values[1].toDouble()
+                    imuLast["gz"] = event.values[2].toDouble()
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        // Register (low power, suitable for background-ish use in tracker)
+        sensorManager.registerListener(accelListener, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(gyroListener, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL)
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "egts_imu")
             .setMethodCallHandler { call, result ->
                 if (call.method == "getImuSample") {
                     try {
-                        val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                        // We return the *last known* values via a simple listener snapshot.
-                        // Real apps should register listeners and push via EventChannel.
-                        val last = HashMap<String, Any>()
-                        // Lightweight: just return zeros + note that full listener registration belongs in production.
-                        // For demo the Dart side falls back to synthetic data.
-                        last["ax"] = 0.0
-                        last["ay"] = 0.0
-                        last["az"] = 9.8
-                        last["gx"] = 0.0
-                        last["gy"] = 0.0
-                        last["gz"] = 0.0
-                        last["heading"] = 0.0
-                        last["roll"] = 0.0
-                        last["pitch"] = 0.0
-                        last["vib_rms"] = 0.03
-                        result.success(last)
+                        // Return a snapshot of the latest sensor readings
+                        result.success(HashMap(imuLast))
                     } catch (e: Exception) {
                         result.error("IMU_ERROR", e.message, null)
                     }

@@ -20,16 +20,17 @@ class EgtsBuilder {
   // ─── Public API ──────────────────────────────────────────────────────────
 
   /// Строит пакет EGTS для события NFC.
-  /// Всегда включает GPS и LBS если доступны.
+  /// Всегда включает GPS, LBS и IMU (SRT 204) если доступны.
   static Uint8List buildNfcPacket({
     required NfcEvent nfc,
     required GpsData gps,
     LbsEvent? lbs,
+    ImuEvent? imu,
     required int terminalId,
     required int packetId,
   }) =>
       _buildPacket(
-        gps: gps, lbs: lbs,
+        gps: gps, lbs: lbs, imu: imu,
         srt202: _buildSrt202NfcTag(nfc),
         srt203: _buildSrt203(eventType: 1, zoneId: 0, ts: nfc.ts),
         terminalId: terminalId, packetId: packetId,
@@ -41,11 +42,12 @@ class EgtsBuilder {
     required BeaconEvent beacon,
     required GpsData gps,
     LbsEvent? lbs,
+    ImuEvent? imu,
     required int terminalId,
     required int packetId,
   }) =>
       _buildPacket(
-        gps: gps, lbs: lbs,
+        gps: gps, lbs: lbs, imu: imu,
         srt202: _buildSrt202Beacon(beacon),
         srt203: _buildSrt203(
             eventType: 1,
@@ -60,11 +62,12 @@ class EgtsBuilder {
     required WifiEvent wifi,
     required GpsData gps,
     LbsEvent? lbs,
+    ImuEvent? imu,
     required int terminalId,
     required int packetId,
   }) =>
       _buildPacket(
-        gps: gps, lbs: lbs,
+        gps: gps, lbs: lbs, imu: imu,
         srt202: _buildSrt202Wifi(wifi),
         srt203: _buildSrt203(eventType: 1, zoneId: 0, ts: wifi.ts),
         terminalId: terminalId, packetId: packetId,
@@ -75,11 +78,12 @@ class EgtsBuilder {
   static Uint8List buildLbsPacket({
     required LbsEvent lbs,
     required GpsData gps,
+    ImuEvent? imu,
     required int terminalId,
     required int packetId,
   }) =>
       _buildPacket(
-        gps: gps, lbs: lbs,
+        gps: gps, lbs: lbs, imu: imu,
         srt202: _buildSrt202Lbs(lbs),
         srt203: _buildSrt203(eventType: 1, zoneId: lbs.cellId, ts: gps.ts),
         terminalId: terminalId, packetId: packetId,
@@ -443,6 +447,7 @@ class EgtsBuilder {
   static final _srtNames = <int, String>{
     16: 'POS_DATA', 17: 'EXT_POS_DATA', 21: 'STATE_DATA',
     202: 'CUSTOM_SRT202 (Tag)', 203: 'CUSTOM_SRT203 (Event)',
+    204: 'CUSTOM_SRT204 (IMU/Inertial)', 205: 'CUSTOM_SRT205 (LBS)',
   };
 
   static Map<String, dynamic> _decodeSrt(int srt, Uint8List srd) {
@@ -480,6 +485,20 @@ class EgtsBuilder {
         fields['event'] = evts[evtCode] ?? 'unknown($evtCode)';
         fields['zone_id'] = buf.getUint32(1, Endian.little);
         fields['time'] = _epoch.add(Duration(seconds: ntm)).toIso8601String();
+      } else if (srt == 204 && srd.length >= 8) {
+        // Basic decode for preview (full fidelity in SERVICE models)
+        final buf = ByteData.sublistView(srd);
+        fields['heading_deg'] = buf.getInt16(0, Endian.little) / 100.0;
+        fields['roll_deg'] = buf.getInt16(2, Endian.little) / 100.0;
+        fields['pitch_deg'] = buf.getInt16(4, Endian.little) / 100.0;
+        if (srd.length >= 20) {
+          fields['accel_x'] = buf.getInt16(8, Endian.little) / 100.0;
+          fields['accel_y'] = buf.getInt16(10, Endian.little) / 100.0;
+          fields['accel_z'] = buf.getInt16(12, Endian.little) / 100.0;
+          fields['gyro_x'] = buf.getInt16(14, Endian.little) / 100.0;
+          fields['gyro_y'] = buf.getInt16(16, Endian.little) / 100.0;
+          fields['gyro_z'] = buf.getInt16(18, Endian.little) / 100.0;
+        }
       }
     } catch (_) {}
     return {

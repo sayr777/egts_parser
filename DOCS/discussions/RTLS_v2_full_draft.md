@@ -187,6 +187,18 @@ IMU (100–200 Hz: accel + gyro + mag)
 
 ---
 
+**Статус реализации (2026-06-12 update):**
+- SRT 204 и SRT 205 полностью поддержаны в SERVICE/egts (models, codec, const, handler processing + snap for LBS).
+- filters/ содержит MadgwickFilter, EGTS_EKF, vibration (production-ready порты из sandbox).
+- MOBILE_APP: LBS collector + auto-send на cell change (SRT205) + новый symmetric IMU collector (SRT204) на платформенном канале (с реальным SensorManager accel/gyro на Android). build*Packet обогащены imu: _lastImu. Survey поддерживает отправку IMU/LBS.
+- Excel: bidirectional SRT_204 и SRT_205 листы.
+- Sandbox: полные демо с mixed 204+205 пакетами (114 байт), LBS likelihood с path-loss, тесты edge-кейсов.
+- TZ.docx и обсуждения обновлены.
+
+Многие фазы roadmap выполнены. Дальше — реальный on-device fusion в Dart, больше UI для inertial данных, production PostGIS map-match.
+
+---
+
 **Готово к использованию в качестве основы для полноценного ТЗ.**
 
 Следующий шаг: наполнить этот документ деталями из 08–17 + результатами тестирования прототипов из `sandbox/`. При необходимости добавить разделы по безопасности, производительности и compliance (ФСТЭК/ФСБ).
