@@ -64,7 +64,7 @@ from egts.models import (
     SrAdSensorsData, SrAbsCntrData, SrTermIdentity,
     SrRecordResponse, SrResultCode, SrAuthInfo,
     SrCountersData, SrPassengersCounters,
-    SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom205, SrRaw,
+    SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom204, SrCustom205, SrRaw,
 )
 from egts.const import SRT_NAMES, PT_NAMES, SVC_NAMES, RESULT_CODES
 
@@ -84,7 +84,8 @@ SRT200C = "FFF2CC"
 SRT201C = "E2EFDA"
 SRT202C = "DEEAF1"
 SRT203C = "FCE4D6"
-SRT205C = "D9EAD3"  # LBS (new for discussion 18)
+SRT204C = "EAD1DC"  # IMU / Inertial (discussion 09, 13-16)
+SRT205C = "D9EAD3"  # LBS (discussion 18)
 
 
 def _fill(c: str) -> PatternFill:
@@ -215,6 +216,7 @@ def decode_to_workbook(packets: list[EGTSPacket]) -> openpyxl.Workbook:
     _sheet_srt201(wb, packets)
     _sheet_srt202(wb, packets)
     _sheet_srt203(wb, packets)
+    _sheet_srt204(wb, packets)  # IMU / Inertial + fusion (discussion 09, 13-16)
     _sheet_srt205(wb, packets)  # LBS (discussion 18)
     _sheet_raw(wb, packets)
     return wb
@@ -588,6 +590,43 @@ def _sheet_srt203(wb, packets):
                 r.rd.subrecord.to_bytes().hex().upper()]
     _srt_sheet(wb, "SRT_203", "EGTS_SR_CUSTOM_SRT203 (SRT=203) — RTLS Event Data",
                cols, ct, rows, _vals, section_color="375623")
+
+
+def _sheet_srt204(wb, packets):
+    """IMU / Inertial data sheet (SRT=204) — orientation, accel/gyro, vibration, EKF + map-match outputs."""
+    rows = _collect(packets, 204)
+    cols = ["PKT#", "SDR#", "SR#",
+            "heading_deg", "roll_deg", "pitch_deg", "heading_accuracy_deg",
+            "accel_x", "accel_y", "accel_z",
+            "gyro_x", "gyro_y", "gyro_z",
+            "vibration_rms", "vibration_peak", "dominant_freq_hz", "filter_type",
+            "ekf_confidence", "cov_trace",
+            "road_segment_id", "matched_lat", "matched_lon", "snap_confidence",
+            "flags", "timestamp", "HEX_SRD"]
+    ct = ["", "", "",
+          "ATTR", "ATTR", "ATTR", "ATTR",
+          "ATTR", "ATTR", "ATTR",
+          "ATTR", "ATTR", "ATTR",
+          "ATTR", "ATTR", "ATTR", "ATTR",
+          "ATTR", "ATTR",
+          "ATTR", "ATTR", "ATTR", "ATTR",
+          "ATTR", "ATTR", "HEX"]
+    def _vals(r: _Row):
+        d = r.rd.subrecord.to_dict()
+        return [r.pkt_idx+1, r.sdr_idx+1, r.sr_idx+1,
+                d.get("heading_deg", ""), d.get("roll_deg", ""), d.get("pitch_deg", ""),
+                d.get("heading_accuracy_deg", ""),
+                d.get("accel_x", ""), d.get("accel_y", ""), d.get("accel_z", ""),
+                d.get("gyro_x", ""), d.get("gyro_y", ""), d.get("gyro_z", ""),
+                d.get("vibration_rms", ""), d.get("vibration_peak", ""),
+                d.get("dominant_freq_hz", ""), d.get("filter_type", ""),
+                d.get("ekf_confidence", ""), d.get("cov_trace", ""),
+                d.get("road_segment_id", ""), d.get("matched_lat", ""),
+                d.get("matched_lon", ""), d.get("snap_confidence", ""),
+                d.get("flags", ""), d.get("timestamp", ""),
+                r.rd.subrecord.to_bytes().hex().upper()]
+    _srt_sheet(wb, "SRT_204", "EGTS_SR_CUSTOM_SRT204 (SRT=204) — IMU + Inertial + Fusion outputs (discussion 09/13-16)",
+               cols, ct, rows, _vals, section_color="843C0C")
 
 
 def _sheet_srt205(wb, packets):

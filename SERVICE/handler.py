@@ -197,7 +197,7 @@ def _sdr_from_dict(d: dict):
         SrAdSensorsData, SrAbsCntrData, SrTermIdentity,
         SrRecordResponse, SrResultCode, SrAuthInfo,
         SrExtPosData, SrCountersData, SrPassengersCounters,
-        SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom205, SrRaw,
+        SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom204, SrCustom205, SrRaw,
     )
     from egts.const import (
         SRT_POS_DATA, SRT_STATE_DATA, SRT_STATE_OR_ACCEL,
@@ -205,7 +205,7 @@ def _sdr_from_dict(d: dict):
         SRT_TERM_IDENTITY, SRT_RECORD_RESPONSE, SRT_RESULT_CODE,
         SRT_AUTH_INFO, SRT_EXT_POS_DATA, SRT_COUNTERS_DATA,
         SRT_PASSENGERS_COUNTERS, SRT_CUSTOM_200, SRT_CUSTOM_201,
-        SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_205,
+        SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_204, SRT_CUSTOM_205,
     )
 
     sdr = ServiceDataRecord(
@@ -236,6 +236,7 @@ def _sdr_from_dict(d: dict):
         SRT_CUSTOM_201:          SrCustom201,
         SRT_CUSTOM_202:          SrCustom202,
         SRT_CUSTOM_203:          SrCustom203,
+        SRT_CUSTOM_204:          SrCustom204,  # IMU + fusion outputs (discussions 09, 13-16)
         SRT_CUSTOM_205:          SrCustom205,  # LBS (base stations) for road graph positioning (discussion 18)
     }
 

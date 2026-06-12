@@ -21,7 +21,7 @@ from .const import (
     SRT_AD_SENSORS_DATA, SRT_COUNTERS_DATA, SRT_STATE_OR_ACCEL,
     SRT_STATE_DATA, SRT_ABS_CNTR_DATA, SRT_LIQUID_LEVEL_SENSOR,
     SRT_PASSENGERS_COUNTERS, SRT_CUSTOM_200, SRT_CUSTOM_201,
-    SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_205, SRT_NAMES, PT_NAMES, SVC_NAMES,
+    SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_204, SRT_CUSTOM_205, SRT_NAMES, PT_NAMES, SVC_NAMES,
     RESULT_CODES,
 )
 from .crc import crc8, crc16
@@ -30,7 +30,7 @@ from .models import (
     SrRecordResponse, SrTermIdentity, SrAuthInfo, SrResultCode,
     SrDispatcherIdentity, SrPosData, SrExtPosData, SrAdSensorsData,
     SrCountersData, SrStateData, SrAbsCntrData, SrLiquidLevelSensor,
-    SrPassengersCounters, SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom205,
+    SrPassengersCounters, SrCustom200, SrCustom201, SrCustom202, SrCustom203, SrCustom204, SrCustom205,
     SrRaw, _Subrecord,
 )
 
@@ -59,6 +59,7 @@ def _decode_subrecord(srt: int, data: bytes) -> _Subrecord:
         if srt == SRT_CUSTOM_201:          return SrCustom201.from_bytes(data)
         if srt == SRT_CUSTOM_202:          return SrCustom202.from_bytes(data)
         if srt == SRT_CUSTOM_203:          return SrCustom203.from_bytes(data)
+        if srt == SRT_CUSTOM_204:          return SrCustom204.from_bytes(data)  # IMU + fusion (09/13-16)
         if srt == SRT_CUSTOM_205:          return SrCustom205.from_bytes(data)  # LBS for road graph (18)
     except EGTSError as e:
         raw = SrRaw.from_bytes(srt, data)

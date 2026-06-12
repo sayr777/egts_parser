@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, List
 
-from .const import EPOCH, RESULT_CODES, SRT_NAMES, SVC_NAMES, SRT_CUSTOM_200, SRT_CUSTOM_201, SRT_CUSTOM_202, SRT_CUSTOM_203
+from .const import EPOCH, RESULT_CODES, SRT_NAMES, SVC_NAMES, SRT_CUSTOM_200, SRT_CUSTOM_201, SRT_CUSTOM_202, SRT_CUSTOM_203, SRT_CUSTOM_204
 
 # ---------------------------------------------------------------------------
 # Base
@@ -953,6 +953,131 @@ class SrCustom203(_Subrecord):
             "event_flags": f"{self.event_flags:#04x}",
             "raw_hex": self.raw_hex,
         }
+
+
+# ---------------------------------------------------------------------------
+# SRT 204 — IMU / Inertial data + Sensor Fusion outputs
+# (discussion 09-inertial-sensors-egts + 13-sensor-fusion-architecture + 14-16)
+# ---------------------------------------------------------------------------
+@dataclass
+class SrCustom204(_Subrecord):
+    """Proposed SRT 204 — IMU orientation, raw sensors, vibration metrics, EKF/map-match outputs."""
+    SRT: int = field(default=204, init=False, repr=False)
+
+    # Orientation (from Madgwick, discussion 16)
+    heading_deg: float = 0.0
+    roll_deg: float = 0.0
+    pitch_deg: float = 0.0
+    heading_accuracy_deg: float = 5.0
+
+    # Raw IMU (body frame)
+    accel_x: float = 0.0
+    accel_y: float = 0.0
+    accel_z: float = 0.0
+    gyro_x: float = 0.0
+    gyro_y: float = 0.0
+    gyro_z: float = 0.0
+
+    # Vibration metrics (discussion 10)
+    vibration_rms: float = 0.0
+    vibration_peak: float = 0.0
+    dominant_freq_hz: float = 0.0
+    filter_type: int = 0   # 0=none,1=lpf,2=madgwick,3=ekf,4=hybrid
+
+    # EKF outputs (discussion 14)
+    ekf_confidence: float = 0.0
+    cov_trace: float = 0.0
+
+    # Map matching outputs (discussion 08, 15)
+    road_segment_id: int = 0
+    matched_lat: float = 0.0
+    matched_lon: float = 0.0
+    snap_confidence: float = 0.0
+
+    flags: int = 0
+    timestamp: int = 0
+    raw_hex: str = ""
+    _raw_bytes: bytes = field(default=b"", repr=False)
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d.pop("_raw_bytes", None)
+        d["heading"] = round(self.heading_deg, 2)
+        d["roll"] = round(self.roll_deg, 2)
+        d["pitch"] = round(self.pitch_deg, 2)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        known = {k for k in cls.__dataclass_fields__ if k not in ("SRT", "_raw_bytes")}
+        filtered = {k: v for k, v in d.items() if k in known}
+        return cls(**filtered)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "SrCustom204":
+        obj = cls(_raw_bytes=data, raw_hex=data.hex().upper())
+        if len(data) < 8:
+            return obj
+        off = 0
+        if len(data) >= off + 8:
+            h, r, p, ha = struct.unpack_from("<hhhh", data, off)
+            obj.heading_deg = h / 100.0
+            obj.roll_deg = r / 100.0
+            obj.pitch_deg = p / 100.0
+            obj.heading_accuracy_deg = ha / 100.0
+            off += 8
+        if len(data) >= off + 12:
+            ax, ay, az, gx, gy, gz = struct.unpack_from("<hhhhhh", data, off)
+            obj.accel_x = ax / 100.0; obj.accel_y = ay / 100.0; obj.accel_z = az / 100.0
+            obj.gyro_x = gx / 100.0; obj.gyro_y = gy / 100.0; obj.gyro_z = gz / 100.0
+            off += 12
+        if len(data) >= off + 8:
+            vrms, vpeak, dfreq, ftype, conf8 = struct.unpack_from("<HHHBB", data, off)
+            obj.vibration_rms = vrms / 100.0
+            obj.vibration_peak = vpeak / 100.0
+            obj.dominant_freq_hz = dfreq / 10.0
+            obj.filter_type = ftype
+            obj.ekf_confidence = conf8 / 255.0
+            off += 8
+        if len(data) >= off + 4:
+            obj.cov_trace = struct.unpack_from("<f", data, off)[0]; off += 4
+        if len(data) >= off + 4:
+            obj.road_segment_id = struct.unpack_from("<I", data, off)[0]; off += 4
+        if len(data) >= off + 9:
+            mlat, mlon = struct.unpack_from("<ii", data, off)
+            obj.matched_lat = mlat / 1e7
+            obj.matched_lon = mlon / 1e7
+            obj.snap_confidence = data[off + 8] / 255.0
+            off += 9
+        if len(data) >= off + 5:
+            obj.flags = data[off]
+            obj.timestamp = struct.unpack_from("<I", data, off + 1)[0]
+        return obj
+
+    def to_bytes(self) -> bytes:
+        def clamp(v, lo=-32767, hi=32767): return max(lo, min(hi, int(v)))
+        out = struct.pack("<hhhh",
+            clamp(self.heading_deg * 100), clamp(self.roll_deg * 100),
+            clamp(self.pitch_deg * 100), clamp(self.heading_accuracy_deg * 100))
+        out += struct.pack("<hhhhhh",
+            clamp(self.accel_x * 100), clamp(self.accel_y * 100), clamp(self.accel_z * 100),
+            clamp(self.gyro_x * 100), clamp(self.gyro_y * 100), clamp(self.gyro_z * 100))
+        out += struct.pack("<HHHBB",
+            int(self.vibration_rms * 100) & 0xFFFF,
+            int(self.vibration_peak * 100) & 0xFFFF,
+            int(self.dominant_freq_hz * 10) & 0xFFFF,
+            self.filter_type & 0xFF,
+            int(max(0, min(1, self.ekf_confidence)) * 255) & 0xFF)
+        out += struct.pack("<f", float(self.cov_trace))
+        out += struct.pack("<I", self.road_segment_id & 0xFFFFFFFF)
+        out += struct.pack("<iiB",
+            int(self.matched_lat * 1e7) & 0xFFFFFFFF,
+            int(self.matched_lon * 1e7) & 0xFFFFFFFF,
+            int(max(0, min(1, self.snap_confidence)) * 255) & 0xFF)
+        out += struct.pack("<BI", self.flags & 0xFF, self.timestamp & 0xFFFFFFFF)
+        self._raw_bytes = out
+        self.raw_hex = out.hex().upper()
+        return out
 
 
 # ---------------------------------------------------------------------------

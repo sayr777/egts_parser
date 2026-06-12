@@ -41,6 +41,7 @@ SRT_CUSTOM_200          = 200
 SRT_CUSTOM_201          = 201
 SRT_CUSTOM_202          = 202
 SRT_CUSTOM_203          = 203
+SRT_CUSTOM_204          = 204  # IMU / Inertial data + fusion outputs (discussion 09, 13-16)
 SRT_CUSTOM_205          = 205  # LBS (base stations) data for road graph positioning (discussion 18)
 
 SRT_NAMES: dict[int, str] = {
@@ -68,6 +69,7 @@ SRT_NAMES: dict[int, str] = {
     SRT_CUSTOM_201:          "EGTS_SR_CUSTOM_SRT201",
     SRT_CUSTOM_202:          "EGTS_SR_CUSTOM_SRT202",
     SRT_CUSTOM_203:          "EGTS_SR_CUSTOM_SRT203",
+    SRT_CUSTOM_204:          "EGTS_SR_CUSTOM_SRT204",  # IMU / Inertial + fusion
     SRT_CUSTOM_205:          "EGTS_SR_CUSTOM_SRT205",  # LBS data
 }
 
