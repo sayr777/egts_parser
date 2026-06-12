@@ -225,6 +225,10 @@ class TrackerProvider extends ChangeNotifier {
       // Optional: auto-send inertial packet on significant motion / vibration
       // (for now manual via survey or future motion trigger; keeps data volume reasonable)
       // if (imu.vibrationRms > 0.15) { sendImuPacket(imu); }
+
+      // Simple on-device derived value example (placeholder):
+      // real vibration/heading fusion lives in SERVICE/egts/filters (vibration.py, madgwick.py, ekf.py)
+      // and can be called server-side on received SRT 204.
     });
   }
 

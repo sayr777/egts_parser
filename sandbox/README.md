@@ -74,7 +74,7 @@ python srt205_lbs.py        # SRT 205 LBS data model (new)
 LBS (cellular base stations) + road graph positioning (discussion 18) + full IMU/SRT204 (09/12/13-16) is fully prototyped + ported to real code:
 - `lbs_map_matcher.py` + `srt205_lbs.py` + **real `SERVICE/egts/models.py:SrCustom205`** + handler processing + lbs_aware_snap.
 - **IMU side**: `srt204.py` pattern + **real `SERVICE/egts/models.py:SrCustom204`** (full to_bytes/from_bytes with orientation/raw/vib/EKF/road fields) + filters (madgwick/ekf/vibration) + handler inertial_records block.
-- MOBILE_APP: symmetric collectors (lbs_collector + new imu_collector with real Android SensorManager accel/gyro + basic tilt/yaw integration), provider auto-wiring + _lastImu, all build*Packet now accept+embed ImuEvent (SRT204 in any trigger packet or dedicated buildImuPacket). 50-byte layout matches SERVICE model.
+- MOBILE_APP: symmetric collectors (lbs_collector + imu_collector with real Android SensorManager accel/gyro + basic tilt/yaw integration + proper onResume/onPause lifecycle), provider with lastImu + imuEvents + derived hints, all build*Packet embed ImuEvent (SRT204). 50-byte layout matches SERVICE model. UI shows last IMU snapshot. Server handler now runs vibration_metrics + Madgwick on received 204 data.
 - `fusion_pipeline.py` + `demo.py`: mixed SRT204+SRT205 packets (real SERVICE.codec build, ~114B), EKF + LBS snap updates.
 - Excel bidirectional for both 204/205.
 - Native Android: real sensors for both LBS (CellInfo) and IMU.

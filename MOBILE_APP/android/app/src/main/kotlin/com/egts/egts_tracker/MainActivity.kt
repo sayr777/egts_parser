@@ -14,6 +14,19 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
+    // IMU state (shared with MethodChannel and listeners)
+    private val imuLast = HashMap<String, Any>().apply {
+        put("ax", 0.0); put("ay", 0.0); put("az", 9.8)
+        put("gx", 0.0); put("gy", 0.0); put("gz", 0.0)
+        put("heading", 0.0); put("roll", 0.0); put("pitch", 0.0)
+        put("vib_rms", 0.03)
+    }
+    private var yaw = 0.0
+    private var lastGyroTs = 0L
+    private lateinit var sensorManager: SensorManager
+    private lateinit var accelListener: SensorEventListener
+    private lateinit var gyroListener: SensorEventListener
+
     @SuppressLint("MissingPermission")
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -93,35 +106,32 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // IMU channel for SRT 204 (accel + gyro + basic orientation)
-        val imuLast = HashMap<String, Any>()
-        imuLast["ax"] = 0.0
-        imuLast["ay"] = 0.0
-        imuLast["az"] = 9.8
-        imuLast["gx"] = 0.0
-        imuLast["gy"] = 0.0
-        imuLast["gz"] = 0.0
-        imuLast["heading"] = 0.0
-        imuLast["roll"] = 0.0
-        imuLast["pitch"] = 0.0
-        imuLast["vib_rms"] = 0.03
+        // IMU channel (uses imuLast populated by listeners)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "egts_imu")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getImuSample") {
+                    try {
+                        result.success(HashMap(imuLast))
+                    } catch (e: Exception) {
+                        result.error("IMU_ERROR", e.message, null)
+                    }
+                } else {
+                    result.notImplemented()
+                }
+            }
 
-        // Simple accumulators for demo orientation (real Madgwick would be in Dart or native lib)
-        var yaw = 0.0
-        var lastGyroTs = 0L
+        // Prepare sensor manager and listeners (registration happens in onResume)
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
-        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val accelListener = object : SensorEventListener {
+        accelListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && event.values.size >= 3) {
                     imuLast["ax"] = event.values[0].toDouble()
                     imuLast["ay"] = event.values[1].toDouble()
                     imuLast["az"] = event.values[2].toDouble()
-                    // crude vibration estimate
                     val mag = Math.sqrt((event.values[0]*event.values[0] + event.values[1]*event.values[1] + event.values[2]*event.values[2]).toDouble())
                     imuLast["vib_rms"] = (mag - 9.8).coerceAtLeast(0.0) * 0.1
 
-                    // Very basic tilt from accel (for roll/pitch demo)
                     val ax = event.values[0].toDouble()
                     val ay = event.values[1].toDouble()
                     val az = event.values[2].toDouble()
@@ -131,7 +141,8 @@ class MainActivity : FlutterActivity() {
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
-        val gyroListener = object : SensorEventListener {
+
+        gyroListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (event.sensor.type == Sensor.TYPE_GYROSCOPE && event.values.size >= 3) {
                     val now = System.currentTimeMillis()
@@ -144,7 +155,6 @@ class MainActivity : FlutterActivity() {
 
                     if (lastGyroTs > 0) {
                         val dt = (now - lastGyroTs) / 1000.0
-                        // Integrate gz (yaw rate) for demo heading (degrees)
                         yaw = (yaw + Math.toDegrees(gz) * dt) % 360.0
                         if (yaw < 0) yaw += 360.0
                         imuLast["heading"] = yaw
@@ -154,44 +164,19 @@ class MainActivity : FlutterActivity() {
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
-
-        // Register on resume, unregister on pause to save battery / avoid leaks
-        // (suitable for tracker that starts/stops scanning)
-        fun registerImuSensors() {
-            sensorManager.registerListener(accelListener, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
-            sensorManager.registerListener(gyroListener, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL)
-        }
-        fun unregisterImuSensors() {
-            sensorManager.unregisterListener(accelListener)
-            sensorManager.unregisterListener(gyroListener)
-        }
-
-        registerImuSensors()  // initial register (configureFlutterEngine time)
-
-        // Hook into Flutter lifecycle via the activity
-        // Note: for production, consider a dedicated service or better state mgmt
-        // Here we rely on the app's startScanning/stopScanning to manage, but listeners are always on when activity is.
-        // For simplicity in this tracker prototype, listeners stay registered while app is in foreground.
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "egts_imu")
-            .setMethodCallHandler { call, result ->
-                if (call.method == "getImuSample") {
-                    try {
-                        // Return a snapshot of the latest sensor readings
-                        result.success(HashMap(imuLast))
-                    } catch (e: Exception) {
-                        result.error("IMU_ERROR", e.message, null)
-                    }
-                } else {
-                    result.notImplemented()
-                }
-            }
-
-        // Optional: expose unregister if Dart wants to control (e.g. when stopScanning)
-        // For now the provider's stop will just stop using the stream; sensors keep low power.
     }
 
-    // Lifecycle helpers (called from Flutter side via future MethodChannel if needed, or rely on activity)
-    // For this prototype we keep simple registration at engine config.
-    // Production: move registration into onResume / onPause overrides.
+    override fun onResume() {
+        super.onResume()
+        // Register IMU sensors when activity is visible (saves battery when backgrounded)
+        sensorManager.registerListener(accelListener, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(gyroListener, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Unregister to prevent leaks and unnecessary power use
+        sensorManager.unregisterListener(accelListener)
+        sensorManager.unregisterListener(gyroListener)
+    }
 }

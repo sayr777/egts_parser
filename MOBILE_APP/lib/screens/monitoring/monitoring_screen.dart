@@ -329,7 +329,8 @@ class _LbsTab extends StatelessWidget {
               child: Text(
                 'IMU: h=${prov.lastImu!.headingDeg.toStringAsFixed(1)}° '
                 'r/p=${prov.lastImu!.rollDeg.toStringAsFixed(1)}/${prov.lastImu!.pitchDeg.toStringAsFixed(1)} '
-                'vib=${prov.lastImu!.vibrationRms.toStringAsFixed(3)}',
+                'vib=${prov.lastImu!.vibrationRms.toStringAsFixed(3)} '
+                '@${prov.lastImu!.ts.toLocal().toIso8601String().substring(11,19)}',
                 style: const TextStyle(fontSize: 12),
               ),
             ),

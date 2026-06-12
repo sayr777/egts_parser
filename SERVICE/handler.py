@@ -169,14 +169,26 @@ def handler(event: dict, context=None) -> dict:
                             ax = getattr(imu, 'accel_x', 0.0) or 0.0
                             ay = getattr(imu, 'accel_y', 0.0) or 0.0
                             az = getattr(imu, 'accel_z', 9.8) or 9.8
+                            gx = getattr(imu, 'gyro_x', 0.0) or 0.0
+                            gy = getattr(imu, 'gyro_y', 0.0) or 0.0
+                            gz = getattr(imu, 'gyro_z', 0.0) or 0.0
                             # tiny synthetic window for demo (in real: buffer recent samples)
                             import numpy as np
                             sample = np.array([[ax, ay, az], [ax*0.99, ay*1.01, az], [ax, ay, az]])
                             vib = vibration_metrics(sample)
                             rec['server_vib_rms'] = round(vib.get('rms', 0), 4)
                             logging.info("Server re-computed vibration_metrics: %s", vib)
+
+                            # Demo Madgwick update (orientation re-estimation on server)
+                            try:
+                                mf = MadgwickFilter(beta=0.033, sample_period=0.1)
+                                # single step with accel + gyro (mag optional)
+                                mf.update_imu(np.array([gx, gy, gz]), np.array([ax, ay, az]))
+                                rec['server_madgwick_heading'] = round(np.degrees(mf.euler_angles[2]), 2)
+                            except Exception as me:
+                                logging.debug("Madgwick demo skipped: %s", me)
                         except Exception as e:
-                            logging.debug("vibration_metrics demo skipped: %s", e)
+                            logging.debug("vibration_metrics / filter demo skipped: %s", e)
 
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
