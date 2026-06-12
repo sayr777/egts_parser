@@ -10,6 +10,7 @@ import 'package:egts_tracker/core/egts/egts_client.dart' show EgtsClient, SendRe
 import 'package:egts_tracker/core/prefs/app_prefs.dart';
 import 'package:egts_tracker/models/models.dart';
 import 'lbs_collector.dart';
+import 'imu_collector.dart';
 
 /// Центральный провайдер состояния приложения.
 ///
@@ -43,11 +44,13 @@ class TrackerProvider extends ChangeNotifier {
   final List<BeaconEvent> _beaconEvents = [];
   final List<WifiEvent>   _wifiEvents   = [];
   LbsEvent? _lastLbs;
+  ImuEvent? _lastImu;
 
   List<NfcEvent>    get nfcEvents    => List.unmodifiable(_nfcEvents);
   List<BeaconEvent> get beaconEvents => List.unmodifiable(_beaconEvents);
   List<WifiEvent>   get wifiEvents   => List.unmodifiable(_wifiEvents);
   LbsEvent?         get lastLbs      => _lastLbs;
+  ImuEvent?         get lastImu      => _lastImu;
 
   final List<EgtsPacketInfo> _packets = [];
   List<EgtsPacketInfo> get packets => List.unmodifiable(_packets);
@@ -79,6 +82,9 @@ class TrackerProvider extends ChangeNotifier {
   final List<LbsEvent> _lbsCells = [];
   List<LbsEvent> get lbsCells => List.unmodifiable(_lbsCells);
 
+  final List<ImuEvent> _imuEvents = [];
+  List<ImuEvent> get imuEvents => List.unmodifiable(_imuEvents);
+
   // ─── Start / Stop ────────────────────────────────────────────────────────
 
   Future<void> startScanning() async {
@@ -91,6 +97,7 @@ class TrackerProvider extends ChangeNotifier {
     await _startBle();
     _startWifiPoll();
     _startLbsPoll();
+    _startImuPoll();
   }
 
   void stopScanning() {
@@ -100,6 +107,7 @@ class TrackerProvider extends ChangeNotifier {
     _bleSub?.cancel();
     _wifiTimer?.cancel();
     _stopLbsPoll();
+    _stopImuPoll();
     FlutterBluePlus.stopScan();
     notifyListeners();
   }
@@ -200,6 +208,41 @@ class TrackerProvider extends ChangeNotifier {
   void _stopLbsPoll() {
     _lbsSub?.cancel();
     _lbsCollector = null;
+  }
+
+  // ─── IMU / Inertial (SRT 204) — discussion 12 + 09/13-16 ───────────────────
+  ImuCollector? _imuCollector;
+  StreamSubscription<ImuEvent>? _imuSub;
+
+  void _startImuPoll() {
+    _imuCollector = ImuCollector();
+    _imuSub = _imuCollector!.onImuUpdate.listen((imu) {
+      _imuEvents.add(imu);
+      if (_imuEvents.length > 50) _imuEvents.removeAt(0); // keep recent samples
+      _lastImu = imu;
+      notifyListeners();
+
+      // Optional: auto-send inertial packet on significant motion / vibration
+      // (for now manual via survey or future motion trigger; keeps data volume reasonable)
+      // if (imu.vibrationRms > 0.15) { sendImuPacket(imu); }
+    });
+  }
+
+  void _stopImuPoll() {
+    _imuSub?.cancel();
+    _imuCollector = null;
+  }
+
+  void sendImuPacket(ImuEvent imu) {
+    final pid = ++_packetCounter;
+    final bytes = EgtsBuilder.buildImuPacket(
+      imu: imu,
+      gps: _gps,
+      lbs: _lastLbs,
+      terminalId: _serverConfig.terminalId,
+      packetId: pid,
+    );
+    _sendPacketBytes(bytes, triggerType: 'imu', triggerId: 'imu_${imu.ts.millisecondsSinceEpoch}');
   }
 
   Future<void> refreshLbs() async {

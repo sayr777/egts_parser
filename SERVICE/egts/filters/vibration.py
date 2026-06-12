@@ -18,6 +18,11 @@ def butter_lowpass(cutoff: float, fs: float, order: int = 5):
     return b, a
 
 
+def butter_lowpass_filter(data: np.ndarray, cutoff: float = 10.0, fs: float = 100.0, order: int = 5) -> np.ndarray:
+    """Alias expected by filters/__init__ and fusion code."""
+    return lowpass_filter(data, cutoff, fs, order)
+
+
 def lowpass_filter(data: np.ndarray, cutoff: float = 10.0, fs: float = 100.0, order: int = 5) -> np.ndarray:
     b, a = butter_lowpass(cutoff, fs, order)
     return lfilter(b, a, data)
@@ -26,6 +31,11 @@ def lowpass_filter(data: np.ndarray, cutoff: float = 10.0, fs: float = 100.0, or
 def median_filter(data: np.ndarray, kernel_size: int = 5) -> np.ndarray:
     """Excellent for removing suspension impulse spikes (discussion 10)."""
     return medfilt(data, kernel_size=kernel_size)
+
+
+def vibration_metrics(accel_xyz: np.ndarray, fs: float = 100.0) -> dict:
+    """Alias for SRT 204 / fusion pipeline compatibility."""
+    return compute_vibration_metrics(accel_xyz, fs)
 
 
 def compute_vibration_metrics(accel_xyz: np.ndarray, fs: float = 100.0) -> dict:

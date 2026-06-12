@@ -136,6 +136,36 @@ class LbsEvent {
   }) : ts = ts ?? DateTime.now();
 }
 
+// IMU / Inertial event for SRT 204 (discussion 09/12/13-16)
+// Collected from platform sensors (accel + gyro + optional mag) + Madgwick on device or server.
+class ImuEvent {
+  final double headingDeg;      // from Madgwick or fused
+  final double rollDeg;
+  final double pitchDeg;
+  final double accelX, accelY, accelZ;  // m/s² or g, body frame
+  final double gyroX, gyroY, gyroZ;     // rad/s
+  final double? magX, magY, magZ;       // optional
+  final double vibrationRms;
+  final DateTime ts;
+
+  ImuEvent({
+    required this.headingDeg,
+    required this.rollDeg,
+    required this.pitchDeg,
+    required this.accelX,
+    required this.accelY,
+    required this.accelZ,
+    required this.gyroX,
+    required this.gyroY,
+    required this.gyroZ,
+    this.magX,
+    this.magY,
+    this.magZ,
+    this.vibrationRms = 0.0,
+    DateTime? ts,
+  }) : ts = ts ?? DateTime.now();
+}
+
 // ─── GPS ─────────────────────────────────────────────────────────────────────
 
 class GpsData {

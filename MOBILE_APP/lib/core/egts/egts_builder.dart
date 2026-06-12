@@ -86,6 +86,23 @@ class EgtsBuilder {
         triggerLabel: 'LBS:${lbs.cellId}',
       );
 
+  /// Строит пакет EGTS с IMU / inertial данными (SRT 204).
+  /// Используется для отправки ориентации + raw sensors + vibration + fusion hints.
+  static Uint8List buildImuPacket({
+    required ImuEvent imu,
+    required GpsData gps,
+    LbsEvent? lbs,
+    required int terminalId,
+    required int packetId,
+  }) =>
+      _buildPacket(
+        gps: gps, lbs: lbs, imu: imu,
+        srt202: _buildSrt202Imu(imu),
+        srt203: _buildSrt203(eventType: 2, zoneId: 0, ts: imu.ts), // eventType 2 = inertial
+        terminalId: terminalId, packetId: packetId,
+        triggerLabel: 'IMU:head${imu.headingDeg.toStringAsFixed(0)}',
+      );
+
   /// Декодирует пакет в читаемую структуру для отображения в UI.
   static Map<String, dynamic> decode(Uint8List packet) {
     if (packet.length < 11) return {'error': 'too short'};
@@ -118,6 +135,7 @@ class EgtsBuilder {
   static Uint8List _buildPacket({
     required GpsData gps,
     LbsEvent? lbs,
+    ImuEvent? imu,
     required Uint8List srt202,
     required Uint8List srt203,
     required int terminalId,
@@ -135,6 +153,10 @@ class EgtsBuilder {
     // SRT 205 — detailed LBS for server-side road graph matching (discussion 18)
     if (lbs != null) {
       subrecords.addAll(_subrecord(205, _buildLbsSrt205(lbs)));
+    }
+    // SRT 204 — IMU / inertial + fusion outputs (discussion 09/12/13-16)
+    if (imu != null) {
+      subrecords.addAll(_subrecord(204, _buildSrt204(imu)));
     }
     subrecords.addAll(_subrecord(202, srt202));
     subrecords.addAll(_subrecord(203, srt203));
@@ -252,6 +274,51 @@ class EgtsBuilder {
     buf.setUint16(4, lbs.lac & 0xFFFF, Endian.little);
     buf.setUint16(6, lbs.mcc & 0xFFFF, Endian.little);
     buf.setInt8(8, lbs.rssi.clamp(-128, 127));
+    return buf.buffer.asUint8List();
+  }
+
+  // SRT 204 — IMU / Inertial data (matches SrCustom204 in SERVICE/egts/models.py)
+  static Uint8List _buildSrt204(ImuEvent imu) {
+    final buf = ByteData(38); // enough for orientation + raw + vibration + ekf/road hints
+    // Orientation (0.01 deg units like the wire format)
+    buf.setInt16(0, (imu.headingDeg * 100).toInt(), Endian.little);
+    buf.setInt16(2, (imu.rollDeg * 100).toInt(), Endian.little);
+    buf.setInt16(4, (imu.pitchDeg * 100).toInt(), Endian.little);
+    buf.setInt16(6, 500); // heading_accuracy ~5.0 deg default
+
+    // Raw accel/gyro (scaled *100)
+    buf.setInt16(8, (imu.accelX * 100).toInt(), Endian.little);
+    buf.setInt16(10, (imu.accelY * 100).toInt(), Endian.little);
+    buf.setInt16(12, (imu.accelZ * 100).toInt(), Endian.little);
+    buf.setInt16(14, (imu.gyroX * 100).toInt(), Endian.little);
+    buf.setInt16(16, (imu.gyroY * 100).toInt(), Endian.little);
+    buf.setInt16(18, (imu.gyroZ * 100).toInt(), Endian.little);
+
+    // Vibration + filter type + ekf conf (placeholder)
+    final vib = (imu.vibrationRms * 100).toInt() & 0xFFFF;
+    buf.setUint16(20, vib, Endian.little);
+    buf.setUint16(22, vib, Endian.little); // peak approx
+    buf.setUint16(24, 0, Endian.little);   // dominant freq
+    buf.setUint8(26, 3);                   // filter_type = 3 (ekf/hybrid)
+    buf.setUint8(27, 180);                 // ekf_conf ~0.7
+
+    // cov + road snap placeholders (server or on-device fusion can fill)
+    buf.setFloat32(28, 0.0, Endian.little);
+    buf.setUint32(32, 0, Endian.little);   // road_segment_id
+    buf.setInt32(36, 0, Endian.little);    // partial matched (more fields would need bigger buf or extension)
+    // For full fidelity use the exact layout from models.py to_bytes in a future iteration.
+
+    return buf.buffer.asUint8List(0, 38);
+  }
+
+  // SRT202 for IMU packet (simple tag using heading)
+  static Uint8List _buildSrt202Imu(ImuEvent imu) {
+    final buf = ByteData(9);
+    final tag = (imu.headingDeg * 100).toInt() & 0xFFFFFFFF;
+    buf.setUint32(0, tag, Endian.little);
+    buf.setUint16(4, 204, Endian.little); // hint SRT
+    buf.setUint16(6, 0, Endian.little);
+    buf.setInt8(8, (imu.vibrationRms * 10).toInt().clamp(-128, 127));
     return buf.buffer.asUint8List();
   }
 

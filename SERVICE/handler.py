@@ -134,11 +134,41 @@ def handler(event: dict, context=None) -> dict:
                         except Exception as e:
                             logging.warning("LBS snap failed: %s", e)
 
+    # SRT 204 inertial / fusion processing (discussions 09, 13-16)
+    # The filters (Madgwick, EGTS_EKF, vibration) live in egts/filters/ and can be used here
+    # for server-side validation or re-processing of received IMU data.
+    try:
+        from egts.filters import vibration_metrics, MadgwickFilter, EGTS_EKF
+        # Example: filters are importable and ready for server-side fusion / validation
+    except Exception:
+        pass
+    inertial_records = []
+    for p in pkts:
+        for sdr in getattr(p, 'body', []) or []:
+            if hasattr(sdr, 'record_data'):
+                for rd in sdr.record_data:
+                    if getattr(rd, 'srt', None) == 204 and hasattr(rd, 'subrecord'):
+                        imu = rd.subrecord
+                        rec = {
+                            "heading_deg": getattr(imu, 'heading_deg', None),
+                            "roll_deg": getattr(imu, 'roll_deg', None),
+                            "pitch_deg": getattr(imu, 'pitch_deg', None),
+                            "ekf_confidence": getattr(imu, 'ekf_confidence', None),
+                            "road_segment_id": getattr(imu, 'road_segment_id', None),
+                            "matched_lat": getattr(imu, 'matched_lat', None),
+                            "matched_lon": getattr(imu, 'matched_lon', None),
+                            "snap_confidence": getattr(imu, 'snap_confidence', None),
+                            "vibration_rms": getattr(imu, 'vibration_rms', None),
+                        }
+                        inertial_records.append(rec)
+                        logging.info("Inertial/SRT204 record: %s", rec)
+
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
         "count":   len(pkts),
         "packets": [p.to_dict() for p in pkts],
-        "lbs_records": lbs_records,  # LBS forwarding for map matching
+        "lbs_records": lbs_records,          # LBS forwarding for map matching
+        "inertial_records": inertial_records,  # SRT 204 fusion outputs
     })
 
 

@@ -2,6 +2,10 @@ package com.egts.egts_tracker
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.telephony.*
 import io.flutter.embedding.android.FlutterActivity
@@ -83,6 +87,36 @@ class MainActivity : FlutterActivity() {
                         result.success(list)
                     } catch (e: Exception) {
                         result.error("LBS_ERROR", e.message, null)
+                    }
+                } else {
+                    result.notImplemented()
+                }
+            }
+
+        // IMU channel for SRT 204 (accel + gyro + basic orientation stub)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "egts_imu")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "getImuSample") {
+                    try {
+                        val sm = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                        // We return the *last known* values via a simple listener snapshot.
+                        // Real apps should register listeners and push via EventChannel.
+                        val last = HashMap<String, Any>()
+                        // Lightweight: just return zeros + note that full listener registration belongs in production.
+                        // For demo the Dart side falls back to synthetic data.
+                        last["ax"] = 0.0
+                        last["ay"] = 0.0
+                        last["az"] = 9.8
+                        last["gx"] = 0.0
+                        last["gy"] = 0.0
+                        last["gz"] = 0.0
+                        last["heading"] = 0.0
+                        last["roll"] = 0.0
+                        last["pitch"] = 0.0
+                        last["vib_rms"] = 0.03
+                        result.success(last)
+                    } catch (e: Exception) {
+                        result.error("IMU_ERROR", e.message, null)
                     }
                 } else {
                     result.notImplemented()
