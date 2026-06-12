@@ -120,10 +120,19 @@ class WifiEvent {
 
 class LbsEvent {
   final int mcc, mnc, lac, cellId, rssi;
+  final int? timingAdvance;     // TA for distance estimation (SRT 205)
+  final String? networkType;    // 'LTE' | 'GSM' | 'WCDMA' etc.
   final DateTime ts;
+
   LbsEvent({
-    required this.mcc, required this.mnc, required this.lac,
-    required this.cellId, required this.rssi, DateTime? ts,
+    required this.mcc,
+    required this.mnc,
+    required this.lac,
+    required this.cellId,
+    required this.rssi,
+    this.timingAdvance,
+    this.networkType,
+    DateTime? ts,
   }) : ts = ts ?? DateTime.now();
 }
 

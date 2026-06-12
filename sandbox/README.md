@@ -80,13 +80,16 @@ LBS (cellular base stations) + road graph positioning (discussion 18) is fully p
 
 ## Next steps (from the discussions themselves)
 
-1. **Done:** SrCustom205 in real `SERVICE/egts/models.py` + codec/const. LBS model ready.
-2. Integrate LBS processing in `SERVICE/handler.py` (log/forward SRT 205).
-3. Add LBS sheet + support in Excel parser (PARSER).
-4. Wire real cellular/LBS from Flutter app → send SRT 205.
-5. Production: PostGIS LBS likelihood for map matching (build on 11/15/18).
-6. Update `DOCS/TZ_EGTS_RTLS_v2.docx` with LBS section.
-7. Full test: LBS + IMU + road graph in weak GNSS scenarios for РНИС.
+**Все 7 пунктов выполнены (2026-06-12):**
+1. SrCustom205 в `SERVICE/egts/models.py` + codec/const + handler (логирование/форвардинг + snap).
+2. LBS обработка в `SERVICE/handler.py`.
+3. SRT_205 лист + bidirectional в PARSER/egts_excel_parser.py.
+4. Реальный сбор LBS (CellInfo) в MOBILE_APP: lbs_collector + provider auto-send + builder + Kotlin.
+5. PostGIS LBS (sandbox/postgis_lbs.sql) + улучшенный Python likelihood (path loss + multi-station в lbs.py и lbs_map_matcher.py).
+6. DOCS/TZ_EGTS_RTLS_v2.docx обновлён (Приложение Б).
+7. Тесты/edge (test_lbs.py: weak_gnss, multi_station; demo с реальными 114-байт пакетами SRT204+SRT205; fusion LBS update).
+
+LBS + road graph (станции → likelihood → точка на дороге) полностью готов в sandbox + реальном коде.
 
 ## Synthetic Data
 

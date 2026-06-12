@@ -24,19 +24,22 @@ class MainActivity : FlutterActivity() {
                             when (info) {
                                 is CellInfoLte -> {
                                     val id = info.cellIdentity
+                                    val ss = info.cellSignalStrength
                                     val mcc = if (Build.VERSION.SDK_INT >= 28)
                                         id.mccString?.toIntOrNull() ?: 0
                                     else @Suppress("DEPRECATION") id.mcc
                                     val mnc = if (Build.VERSION.SDK_INT >= 28)
                                         id.mncString?.toIntOrNull() ?: 0
                                     else @Suppress("DEPRECATION") id.mnc
+                                    val ta = if (ss.timingAdvance != CellInfo.UNAVAILABLE) ss.timingAdvance else -1
                                     mapOf(
                                         "type" to "LTE",
                                         "mcc"  to mcc,
                                         "mnc"  to mnc,
                                         "lac"  to id.tac,
                                         "cid"  to id.ci,
-                                        "rssi" to info.cellSignalStrength.dbm,
+                                        "rssi" to ss.dbm,
+                                        "ta"   to ta,
                                     )
                                 }
                                 is CellInfoGsm -> {

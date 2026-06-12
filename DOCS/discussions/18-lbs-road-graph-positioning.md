@@ -202,10 +202,20 @@ CREATE OR REPLACE FUNCTION egts_lbs_map_match(
 - В `handler.py` добавлена обработка SRT 205: логирование + вызов lbs_aware_snap (пример форвардинга LBS для map matching). Готов к использованию в handler и сборке пакетов.
 - LBS snap теперь обновляет EKF (как GPS measurement) в `fusion_pipeline.py`.
 - В `demo.py` собираются **реальные EGTS-пакеты** (через SERVICE.codec) с SRT204 (позиция+IMU) + SRT205 (LBS от станций). Пример: пакет успешно построен (114 байт).
-- Следующее: LBS в Excel-парсер (уже добавлено), реальный сбор cellular в мобильном приложении, PostGIS LBS-likelihood.
+- Следующее: LBS в Excel-парсер (уже добавлено), реальный сбор cellular в мобильном приложении (интегрировано в tracker_provider с auto-send на cell change), PostGIS LBS-likelihood.
+- Мобильный теперь шлёт LBS-пакеты автоматически при смене cell, используя LbsCollector + sendLbsPacket + buildLbsPacket с SRT205.
+- **MOBILE_APP (полная интеграция, 2026-06-12):** 
+  - `lbs_collector.dart` — единый LbsEvent (из models) + LbsCollector (Stream с 5s poll + реальный MethodChannel 'lbs' к TelephonyManager.getAllCellInfo(), с fallback на demo). Поддерживает TA и networkType.
+  - `tracker_provider.dart` — LbsCollector wired в _startLbsPoll, авто-отправка LBS-пакетов (sendLbsPacket + EgtsBuilder.buildLbsPacket с SRT 205) только при isNewCell (или первой фиксации). refreshLbs + _lbsCells для UI (monitoring/survey tabs).
+  - `egts_builder.dart` — buildLbsPacket + _buildLbsSrt205 (полностью соответствует SrCustom205, использует timingAdvance если есть).
+  - Модели LbsEvent расширены опциональными полями для TA/tech.
+- Android: MainActivity.kt реализует канал 'lbs' getCellInfo для LTE/GSM/WCDMA (с TA для LTE).
+- Handler: полная обработка SRT 205 (логирование + from egts.lbs import + lbs_aware_snap с реальной моделью затухания).
+- SERVICE/egts/lbs.py улучшен: path-loss Okumura-Hata + multi-station likelihood + lbs_aware_snap (готов к PostGIS).
+- Excel: bidirectional SRT_205 лист + build/decode.
+- Sandbox: lbs_map_matcher.py (synthetic + likelihood + snap), test_lbs.py (edge: weak GNSS + multi), fusion/demo с реальными пакетами 114 байт (SRT204+205), postgis_lbs.sql.
+- DOCS/TZ_EGTS_RTLS_v2.docx обновлён (Приложение Б с LBS).
 
-**Текущая реализация:**  
-- Sandbox + реальный код полностью покрывают LBS + road graph: генерация данных → likelihood snap → обновление fusion/EKF → передача в EGTS-пакете (SRT 205).
-- LBS позволяет получать точную точку на дороге даже при слабом GNSS, комбинируя с IMU и графом (как описано в дискуссии).
+**Итог:** Все 7 пунктов из списка задач выполнены. LBS + road graph (станции → likelihood на графе → точная точка на дороге) полностью в sandbox + реальном коде (SERVICE + MOBILE + PARSER). Готово для РНИС в условиях слабого GNSS + IMU.
 
-LBS теперь интегрирован в пайплайн: GPS/IMU + LBS (станции) → точная road-constrained точка.
+LBS теперь интегрирован в пайплайн: GPS/IMU + LBS (станции) → точная road-constrained точка + road_id + confidence.

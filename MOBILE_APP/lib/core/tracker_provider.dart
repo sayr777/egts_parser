@@ -71,7 +71,8 @@ class TrackerProvider extends ChangeNotifier {
   StreamSubscription<Position>? _gpsSub;
   StreamSubscription<List<ScanResult>>? _bleSub;
   Timer? _wifiTimer;
-  Timer? _lbsTimer;
+  LbsCollector? _lbsCollector;
+  StreamSubscription<LbsEvent>? _lbsSub;
 
   static const _lbsChannel = MethodChannel('lbs');
 
@@ -179,18 +180,20 @@ class TrackerProvider extends ChangeNotifier {
 
   // ─── LBS cell towers (discussion 18) ───────────────────────────────────────
 
-  LbsCollector? _lbsCollector;
-  StreamSubscription<LbsEvent>? _lbsSub;
-
   void _startLbsPoll() {
     _lbsCollector = LbsCollector();
     _lbsSub = _lbsCollector!.onLbsUpdate.listen((lbs) {
       _lbsCells.add(lbs);
       if (_lbsCells.length > 20) _lbsCells.removeAt(0); // keep recent
+      final isNewCell = _lastLbs == null || _lastLbs!.cellId != lbs.cellId;
       _lastLbs = lbs;
       notifyListeners();
-      // Optional: auto-send LBS packet on significant update (e.g. cell change)
-      // _sendLbsPacketIfNeeded(lbs);
+
+      // Auto-send LBS packet on cell change or first detection (for LBS survey / road matching mode)
+      // LBS is used for precise road positioning using base stations + graph (discussion 18)
+      if (isNewCell) {
+        sendLbsPacket(lbs);
+      }
     });
   }
 
@@ -200,32 +203,65 @@ class TrackerProvider extends ChangeNotifier {
   }
 
   Future<void> refreshLbs() async {
-    // For collector, it streams; for old channel fallback if needed
+    // Manual refresh fallback (the collector already streams periodically).
     try {
       final raw = await _lbsChannel.invokeMethod<List>('getCellInfo');
       if (raw != null && raw.isNotEmpty) {
         final m = Map<String, dynamic>.from(raw.first as Map);
-        _lastLbs = LbsEvent(
+        final evt = LbsEvent(
           mcc: (m['mcc'] as int?) ?? 0,
           mnc: (m['mnc'] as int?) ?? 0,
           lac: (m['lac'] as int?) ?? 0,
           cellId: (m['cid'] as int?) ?? 0,
           rssi: (m['rssi'] as int?) ?? 0,
+          timingAdvance: (m['ta'] as int?),
+          networkType: (m['type'] as String?) ?? (m['tech'] as String?),
         );
+        _lastLbs = evt;
+        _lbsCells.add(evt);
+        if (_lbsCells.length > 20) _lbsCells.removeAt(0);
         notifyListeners();
       }
     } catch (_) {}
   }
 
-  void _sendLbsPacketIfNeeded(LbsEvent lbs) {
-    // Example: send on cell change or timer
-    final packet = EgtsBuilder.buildLbsPacket(
+  void sendLbsPacket(LbsEvent lbs) {
+    final pid = ++_packetCounter;
+    final bytes = EgtsBuilder.buildLbsPacket(
       lbs: lbs,
       gps: _gps,
       terminalId: _serverConfig.terminalId,
-      packetId: _packetCounter++,
+      packetId: pid,
     );
-    _sendPacketBytes(packet, triggerType: 'lbs', triggerId: '${lbs.cellId}');
+    _sendPacketBytes(bytes, triggerType: 'lbs', triggerId: '${lbs.cellId}');
+  }
+
+  Future<void> _sendPacketBytes(Uint8List bytes, {required String triggerType, required String triggerId}) async {
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
+    final decoded = EgtsBuilder.decode(bytes);
+
+    var info = EgtsPacketInfo(
+      bytes: bytes, hexStr: hex, decoded: decoded,
+      triggerType: triggerType, triggerId: triggerId,
+      ts: DateTime.now(),
+    );
+    _packets.insert(0, info);
+    if (_packets.length > 100) _packets.removeLast();
+    notifyListeners();
+
+    final result = await EgtsClient(_serverConfig).send(bytes);
+    final idx = _packets.indexWhere(
+        (p) => p.ts == info.ts && p.triggerId == info.triggerId);
+    if (idx >= 0) {
+      _packets[idx] = _packets[idx].copyWith(
+        sent: result.success,
+        sendError: result.error,
+      );
+    }
+    _statusMsg = result.success
+        ? 'Отправлено: $triggerType $triggerId'
+        : 'Ошибка: ${result.error}';
+    notifyListeners();
   }
 
   Future<void> _scanWifi() async {

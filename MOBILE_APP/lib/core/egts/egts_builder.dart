@@ -130,8 +130,12 @@ class EgtsBuilder {
       subrecords.addAll(_subrecord(17, _buildExtPosData(gps)));
     }
     subrecords.addAll(_subrecord(21, _buildStateData()));
-    // LBS субзапись (тип 103) — ВСЕГДА присутствует в пакете
+    // LBS субзапись (тип 103) — ВСЕГДА присутствует в пакете (legacy)
     subrecords.addAll(_subrecord(103, _buildLbsData(lbs)));
+    // SRT 205 — detailed LBS for server-side road graph matching (discussion 18)
+    if (lbs != null) {
+      subrecords.addAll(_subrecord(205, _buildLbsSrt205(lbs)));
+    }
     subrecords.addAll(_subrecord(202, srt202));
     subrecords.addAll(_subrecord(203, srt203));
 
@@ -218,6 +222,27 @@ class EgtsBuilder {
       buf.setInt8(10, lbs.rssi.clamp(-128, 127));
     }
     return buf.buffer.asUint8List();
+  }
+
+  // SRT 205 — detailed LBS data for server map-matching (discussion 18)
+  // Format matches SrCustom205 in SERVICE/egts/models.py
+  static Uint8List _buildLbsSrt205(LbsEvent lbs) {
+    final buf = ByteData(30);
+    buf.setUint32(0, lbs.cellId & 0xFFFFFFFF, Endian.little);
+    buf.setUint16(4, lbs.lac & 0xFFFF, Endian.little);
+    buf.setUint16(6, lbs.mcc & 0xFFFF, Endian.little);
+    buf.setUint16(8, lbs.mnc & 0xFFFF, Endian.little);
+    buf.setInt8(10, lbs.rssi.clamp(-128, 127));
+    final ta = lbs.timingAdvance ?? 0;
+    buf.setUint16(11, (ta < 0 ? 0 : ta) & 0xFFFF); // timing_advance
+    // bs_lat/lon left 0 (server-side enrichment from cell DB)
+    buf.setInt32(13, 0, Endian.little);
+    buf.setInt32(17, 0, Endian.little);
+    // raw_lbs as placeholder (server does the real snap using TA/RSSI + graph)
+    buf.setInt32(21, (lbs.cellId * 1000).toInt() & 0xFFFFFFFF, Endian.little);
+    buf.setInt32(25, 0, Endian.little);
+    buf.setUint8(29, 70); // quality
+    return buf.buffer.asUint8List(0, 30);
   }
 
   // SRT202 для LBS-пакета (идентификатор по cellId)

@@ -127,7 +127,7 @@ def handler(event: dict, context=None) -> dict:
                         logging.info("LBS record (for road graph matching): %s", lbs_info)  # forward example
                         # Simple Python LBS snap (for demo; use PostGIS in prod - see sandbox/postgis_lbs.sql)
                         try:
-                            from .lbs import lbs_aware_snap
+                            from egts.lbs import lbs_aware_snap
                             matched = lbs_aware_snap(lbs_info)
                             logging.info("LBS snapped to road: %s", matched)
                             lbs_info["matched"] = matched

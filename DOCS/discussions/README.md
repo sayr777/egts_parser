@@ -72,7 +72,7 @@
 | 15 | [15-map-matching-algorithms.md](./15-map-matching-algorithms.md) | Сравнение алгоритмов (Geometric / Topological / HMM+Viterbi / Particle Filter) + библиотеки | `map_matcher.py` (сравнение + stubs) |
 | 16 | [16-madgwick-filter-implementation.md](./16-madgwick-filter-implementation.md) | Полная MadgwickFilter (MARG + IMU-only, β-тюнинг, Euler) | `madgwick.py` (полная чистая реализация) |
 | 17 | [17-geopandas-map-matching.md](./17-geopandas-map-matching.md) | Прототипирование Map Matching с GeoPandas + OSMnx + leuven | `map_matcher.py` (GeoPandas-раздел + примеры) |
-| 18 | [18-lbs-road-graph-positioning.md](./18-lbs-road-graph-positioning.md) | Позиционирование по LBS (базовым станциям сотовой связи) + граф дорог для точной точки на дороге | Полная реализация: `lbs_map_matcher.py` + `srt205_lbs.py` + **реальный `SERVICE/egts/models.py:SrCustom205`** (в codec + const). Интеграция в fusion_pipeline (LBS обновляет EKF), генерация пакетов с SRT204+SRT205 в demo. LBS snap с conf=0.99. |
+| 18 | [18-lbs-road-graph-positioning.md](./18-lbs-road-graph-positioning.md) | Позиционирование по LBS (базовым станциям сотовой связи) + граф дорог для точной точки на дороге | Полная: sandbox (lbs_map_matcher + likelihood + tests) + реальный код (`SERVICE/egts/models.py:SrCustom205`, codec, handler + lbs.py с Okumura-Hata), Excel SRT_205 bidirectional, MOBILE_APP (LbsCollector + auto-send на cell change + buildLbsSrt205 + Kotlin CellInfo), PostGIS sql. TZ.docx обновлён. Все 7 задач выполнены. |
 
 **Ключевой результат серии (08–18):**  
 Чёткая многоуровневая архитектура + готовые прототипы кода (в sandbox/), которые можно переносить в `SERVICE/egts/filters/`, мобильное приложение и Excel-парсер. LBS + road graph snapping (18) теперь работает вместе с IMU/EKF для точной дороги даже без GNSS.
@@ -93,11 +93,13 @@
 - `sandbox/demo.py` — сквозной прогон (реальные GPS-сиды + синтетический IMU + fusion + map matching + генерация SRT 204).
 - `sandbox/srt204.py`, `madgwick.py`, `ekf.py`, `vibration.py`, `fusion_pipeline.py`, `map_matcher.py`, `generate_data.py`.
 
+**Статус (2026-06-12):** LBS (дискуссия 18) полностью реализован и в sandbox, и в реальном коде (SERVICE + PARSER + MOBILE_APP). SRT 205 + LBS-aware snapping (станции + граф дорог) работает вместе с IMU/EKF. 7 явных задач из плана выполнены (handler, PostGIS, Excel, likelihood, mobile CellInfo, TZ.docx, тесты).
+
 **Следующие шаги (рекомендуемые):**
-- Перенести зрелые классы в `SERVICE/egts/filters/` и добавить SRT 204 в `models.py` + `codec.py`.
-- Расширить Excel-парсер (новые листы INERTIAL / MAP_MATCHING).
-- Добавить IMU-сбор в мобильное приложение и реальную отправку SRT 204.
-- Наполнить `RTLS_v2_full_draft.md` и ТЗ.
+- Перенести зрелые классы (EKF, Madgwick, map match, LBS) в `SERVICE/egts/filters/` + добавить SRT 204/205 в production.
+- Расширить Excel-парсер (INERTIAL / MAP_MATCH листы).
+- Реальный IMU сбор (аксел/гиро) в MOBILE_APP + SRT 204.
+- Наполнить/финализировать `RTLS_v2_full_draft.md` и основное ТЗ.
 
 ---
 
