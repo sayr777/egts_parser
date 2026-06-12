@@ -9,6 +9,7 @@ import 'package:egts_tracker/core/egts/egts_builder.dart';
 import 'package:egts_tracker/core/egts/egts_client.dart' show EgtsClient, SendResult;
 import 'package:egts_tracker/core/prefs/app_prefs.dart';
 import 'package:egts_tracker/models/models.dart';
+import 'lbs_collector.dart';
 
 /// Центральный провайдер состояния приложения.
 ///
@@ -97,7 +98,7 @@ class TrackerProvider extends ChangeNotifier {
     _gpsSub?.cancel();
     _bleSub?.cancel();
     _wifiTimer?.cancel();
-    _lbsTimer?.cancel();
+    _stopLbsPoll();
     FlutterBluePlus.stopScan();
     notifyListeners();
   }
@@ -176,36 +177,56 @@ class TrackerProvider extends ChangeNotifier {
     _wifiTimer = Timer.periodic(const Duration(seconds: 15), (_) => _scanWifi());
   }
 
-  // ─── LBS cell towers ──────────────────────────────────────────────────────
+  // ─── LBS cell towers (discussion 18) ───────────────────────────────────────
+
+  LbsCollector? _lbsCollector;
+  StreamSubscription<LbsEvent>? _lbsSub;
 
   void _startLbsPoll() {
-    _scanLbs();
-    _lbsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _scanLbs());
+    _lbsCollector = LbsCollector();
+    _lbsSub = _lbsCollector!.onLbsUpdate.listen((lbs) {
+      _lbsCells.add(lbs);
+      if (_lbsCells.length > 20) _lbsCells.removeAt(0); // keep recent
+      _lastLbs = lbs;
+      notifyListeners();
+      // Optional: auto-send LBS packet on significant update (e.g. cell change)
+      // _sendLbsPacketIfNeeded(lbs);
+    });
   }
 
-  Future<void> _scanLbs() async {
+  void _stopLbsPoll() {
+    _lbsSub?.cancel();
+    _lbsCollector = null;
+  }
+
+  Future<void> refreshLbs() async {
+    // For collector, it streams; for old channel fallback if needed
     try {
       final raw = await _lbsChannel.invokeMethod<List>('getCellInfo');
-      if (raw == null) return;
-      _lbsCells.clear();
-      for (final item in raw) {
-        final m = Map<String, dynamic>.from(item as Map);
-        _lbsCells.add(LbsEvent(
-          mcc:    (m['mcc']  as int?) ?? 0,
-          mnc:    (m['mnc']  as int?) ?? 0,
-          lac:    (m['lac']  as int?) ?? 0,
-          cellId: (m['cid']  as int?) ?? 0,
-          rssi:   (m['rssi'] as int?) ?? 0,
-        ));
+      if (raw != null && raw.isNotEmpty) {
+        final m = Map<String, dynamic>.from(raw.first as Map);
+        _lastLbs = LbsEvent(
+          mcc: (m['mcc'] as int?) ?? 0,
+          mnc: (m['mnc'] as int?) ?? 0,
+          lac: (m['lac'] as int?) ?? 0,
+          cellId: (m['cid'] as int?) ?? 0,
+          rssi: (m['rssi'] as int?) ?? 0,
+        );
+        notifyListeners();
       }
-      if (_lbsCells.isNotEmpty) _lastLbs = _lbsCells.first;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('LBS scan error: $e');
-    }
+    } catch (_) {}
   }
 
-  Future<void> refreshLbs() => _scanLbs();
+  void _sendLbsPacketIfNeeded(LbsEvent lbs) {
+    // Example: send on cell change or timer
+    final packet = EgtsBuilder.buildLbsPacket(
+      lbs: lbs,
+      gps: _gps,
+      terminalId: _serverConfig.terminalId,
+      packetId: _packetCounter++,
+    );
+    _sendPacketBytes(packet, triggerType: 'lbs', triggerId: '${lbs.cellId}');
+  }
 
   Future<void> _scanWifi() async {
     try {

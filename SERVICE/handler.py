@@ -110,7 +110,7 @@ def handler(event: dict, context=None) -> dict:
     # LBS processing example (SRT 205 - discussion 18)
     lbs_records = []
     for p in pkts:
-        for sdr in p.body or []:
+        for sdr in getattr(p, 'body', []) or []:
             if hasattr(sdr, 'record_data'):
                 for rd in sdr.record_data:
                     if getattr(rd, 'srt', None) == 205 and hasattr(rd, 'subrecord'):
@@ -124,13 +124,21 @@ def handler(event: dict, context=None) -> dict:
                             "neighbors_count": len(getattr(lbs, 'neighbors', []) or []),
                         }
                         lbs_records.append(lbs_info)
-                        logging.info("LBS record: %s", lbs_info)  # forward example
+                        logging.info("LBS record (for road graph matching): %s", lbs_info)  # forward example
+                        # Simple Python LBS snap (for demo; use PostGIS in prod - see sandbox/postgis_lbs.sql)
+                        try:
+                            from .lbs import lbs_aware_snap
+                            matched = lbs_aware_snap(lbs_info)
+                            logging.info("LBS snapped to road: %s", matched)
+                            lbs_info["matched"] = matched
+                        except Exception as e:
+                            logging.warning("LBS snap failed: %s", e)
 
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
         "count":   len(pkts),
         "packets": [p.to_dict() for p in pkts],
-        "lbs_records": lbs_records,  # LBS forwarding
+        "lbs_records": lbs_records,  # LBS forwarding for map matching
     })
 
 

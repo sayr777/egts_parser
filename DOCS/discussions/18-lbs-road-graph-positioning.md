@@ -197,10 +197,12 @@ CREATE OR REPLACE FUNCTION egts_lbs_map_match(
 **Файл создан:** `DOCS/discussions/18-lbs-road-graph-positioning.md`
 
 **Следующие шаги (обновлено):**  
-- **Реальный код:** SRT 205 (SrCustom205 + NeighborCell) добавлен в `SERVICE/egts/models.py`, `const.py`, зарегистрирован в `codec.py`. Готов к использованию в handler и сборке пакетов.
+- **Реальный код:** SRT 205 (SrCustom205 + NeighborCell) добавлен в `SERVICE/egts/models.py`, `const.py`, зарегистрирован в `codec.py`.
+- Добавлен `SERVICE/egts/lbs.py` — простой Python LBS snap (для handler, без PostGIS).
+- В `handler.py` добавлена обработка SRT 205: логирование + вызов lbs_aware_snap (пример форвардинга LBS для map matching). Готов к использованию в handler и сборке пакетов.
 - LBS snap теперь обновляет EKF (как GPS measurement) в `fusion_pipeline.py`.
 - В `demo.py` собираются **реальные EGTS-пакеты** (через SERVICE.codec) с SRT204 (позиция+IMU) + SRT205 (LBS от станций). Пример: пакет успешно построен (114 байт).
-- Следующее: добавить обработку SRT 205 в `SERVICE/handler.py`, LBS в Excel-парсер, реальный сбор cellular в мобильном приложении, PostGIS LBS-likelihood.
+- Следующее: LBS в Excel-парсер (уже добавлено), реальный сбор cellular в мобильном приложении, PostGIS LBS-likelihood.
 
 **Текущая реализация:**  
 - Sandbox + реальный код полностью покрывают LBS + road graph: генерация данных → likelihood snap → обновление fusion/EKF → передача в EGTS-пакете (SRT 205).
