@@ -139,7 +139,8 @@ def handler(event: dict, context=None) -> dict:
     # for server-side validation or re-processing of received IMU data.
     try:
         from egts.filters import vibration_metrics, MadgwickFilter, EGTS_EKF
-        # Example: filters are importable and ready for server-side fusion / validation
+        # Demo: if a 204 record arrives with raw sensors we could re-run metrics or init an EKF
+        # (full fusion usually happens on device or in a dedicated pipeline; here we just show availability)
     except Exception:
         pass
     inertial_records = []

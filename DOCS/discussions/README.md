@@ -72,7 +72,7 @@
 | 15 | [15-map-matching-algorithms.md](./15-map-matching-algorithms.md) | Сравнение алгоритмов (Geometric / Topological / HMM+Viterbi / Particle Filter) + библиотеки | `map_matcher.py` (сравнение + stubs) |
 | 16 | [16-madgwick-filter-implementation.md](./16-madgwick-filter-implementation.md) | Полная MadgwickFilter (MARG + IMU-only, β-тюнинг, Euler) | `madgwick.py` (полная чистая реализация) |
 | 17 | [17-geopandas-map-matching.md](./17-geopandas-map-matching.md) | Прототипирование Map Matching с GeoPandas + OSMnx + leuven | `map_matcher.py` (GeoPandas-раздел + примеры) |
-| 18 | [18-lbs-road-graph-positioning.md](./18-lbs-road-graph-positioning.md) | Позиционирование по LBS (базовым станциям сотовой связи) + граф дорог для точной точки на дороге | Полная: sandbox (lbs_map_matcher + likelihood + tests) + реальный код (`SERVICE/egts/models.py:SrCustom205`, codec, handler + lbs.py с Okumura-Hata), Excel SRT_205 bidirectional, MOBILE_APP (LbsCollector + auto-send на cell change + buildLbsSrt205 + Kotlin CellInfo), PostGIS sql. TZ.docx обновлён. Все 7 задач выполнены. |
+| 18 | [18-lbs-road-graph-positioning.md](./18-lbs-road-graph-positioning.md) | Позиционирование по LBS (базовым станциям сотовой связи) + граф дорог для точной точки на дороге | Полная: sandbox + реальный код (SrCustom205 + handler snap + LBS collector+auto-send + builder + PostGIS proto). |
 
 **Ключевой результат серии (08–18):**  
 Чёткая многоуровневая архитектура + готовые прототипы кода (в sandbox/), которые можно переносить в `SERVICE/egts/filters/`, мобильное приложение и Excel-парсер. LBS + road graph snapping (18) теперь работает вместе с IMU/EKF для точной дороги даже без GNSS.

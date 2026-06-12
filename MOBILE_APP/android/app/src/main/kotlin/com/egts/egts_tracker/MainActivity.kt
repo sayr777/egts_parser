@@ -106,6 +106,10 @@ class MainActivity : FlutterActivity() {
         imuLast["pitch"] = 0.0
         imuLast["vib_rms"] = 0.03
 
+        // Simple accumulators for demo orientation (real Madgwick would be in Dart or native lib)
+        var yaw = 0.0
+        var lastGyroTs = 0L
+
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val accelListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -116,6 +120,13 @@ class MainActivity : FlutterActivity() {
                     // crude vibration estimate
                     val mag = Math.sqrt((event.values[0]*event.values[0] + event.values[1]*event.values[1] + event.values[2]*event.values[2]).toDouble())
                     imuLast["vib_rms"] = (mag - 9.8).coerceAtLeast(0.0) * 0.1
+
+                    // Very basic tilt from accel (for roll/pitch demo)
+                    val ax = event.values[0].toDouble()
+                    val ay = event.values[1].toDouble()
+                    val az = event.values[2].toDouble()
+                    imuLast["roll"] = Math.toDegrees(Math.atan2(ay, Math.sqrt(ax*ax + az*az)))
+                    imuLast["pitch"] = Math.toDegrees(Math.atan2(-ax, Math.sqrt(ay*ay + az*az)))
                 }
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -123,9 +134,22 @@ class MainActivity : FlutterActivity() {
         val gyroListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (event.sensor.type == Sensor.TYPE_GYROSCOPE && event.values.size >= 3) {
-                    imuLast["gx"] = event.values[0].toDouble()
-                    imuLast["gy"] = event.values[1].toDouble()
-                    imuLast["gz"] = event.values[2].toDouble()
+                    val now = System.currentTimeMillis()
+                    val gx = event.values[0].toDouble()
+                    val gy = event.values[1].toDouble()
+                    val gz = event.values[2].toDouble()
+                    imuLast["gx"] = gx
+                    imuLast["gy"] = gy
+                    imuLast["gz"] = gz
+
+                    if (lastGyroTs > 0) {
+                        val dt = (now - lastGyroTs) / 1000.0
+                        // Integrate gz (yaw rate) for demo heading (degrees)
+                        yaw = (yaw + Math.toDegrees(gz) * dt) % 360.0
+                        if (yaw < 0) yaw += 360.0
+                        imuLast["heading"] = yaw
+                    }
+                    lastGyroTs = now
                 }
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

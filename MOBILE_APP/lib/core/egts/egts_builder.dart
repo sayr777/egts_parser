@@ -281,38 +281,51 @@ class EgtsBuilder {
     return buf.buffer.asUint8List();
   }
 
-  // SRT 204 — IMU / Inertial data (matches SrCustom204 in SERVICE/egts/models.py)
+  // SRT 204 — IMU / Inertial data (matches SrCustom204 in SERVICE/egts/models.py exactly)
+  // Layout (total ~50 bytes):
+  // 0-7:   heading,roll,pitch,ha (int16 * 0.01°)
+  // 8-19:  ax,ay,az,gx,gy,gz (int16 * 0.01)
+  // 20-27: vib_rms, vib_peak, dom_freq*10, filter_type, ekf_conf*255 (HHHBB)
+  // 28-31: cov_trace (float32)
+  // 32-35: road_segment_id (uint32)
+  // 36-44: matched_lat*1e7, matched_lon*1e7, snap_conf*255 (iiB)
+  // 45-49: flags (B), timestamp (uint32)
   static Uint8List _buildSrt204(ImuEvent imu) {
-    final buf = ByteData(38); // enough for orientation + raw + vibration + ekf/road hints
-    // Orientation (0.01 deg units like the wire format)
-    buf.setInt16(0, (imu.headingDeg * 100).toInt(), Endian.little);
-    buf.setInt16(2, (imu.rollDeg * 100).toInt(), Endian.little);
-    buf.setInt16(4, (imu.pitchDeg * 100).toInt(), Endian.little);
-    buf.setInt16(6, 500); // heading_accuracy ~5.0 deg default
+    final buf = ByteData(50);
+    // Orientation (0.01 deg)
+    buf.setInt16(0, (imu.headingDeg * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(2, (imu.rollDeg * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(4, (imu.pitchDeg * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(6, 500); // ha default 5.0°
 
-    // Raw accel/gyro (scaled *100)
-    buf.setInt16(8, (imu.accelX * 100).toInt(), Endian.little);
-    buf.setInt16(10, (imu.accelY * 100).toInt(), Endian.little);
-    buf.setInt16(12, (imu.accelZ * 100).toInt(), Endian.little);
-    buf.setInt16(14, (imu.gyroX * 100).toInt(), Endian.little);
-    buf.setInt16(16, (imu.gyroY * 100).toInt(), Endian.little);
-    buf.setInt16(18, (imu.gyroZ * 100).toInt(), Endian.little);
+    // Raw IMU (scaled *100)
+    buf.setInt16(8, (imu.accelX * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(10, (imu.accelY * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(12, (imu.accelZ * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(14, (imu.gyroX * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(16, (imu.gyroY * 100).clamp(-32767, 32767).toInt(), Endian.little);
+    buf.setInt16(18, (imu.gyroZ * 100).clamp(-32767, 32767).toInt(), Endian.little);
 
-    // Vibration + filter type + ekf conf (placeholder)
-    final vib = (imu.vibrationRms * 100).toInt() & 0xFFFF;
-    buf.setUint16(20, vib, Endian.little);
-    buf.setUint16(22, vib, Endian.little); // peak approx
-    buf.setUint16(24, 0, Endian.little);   // dominant freq
-    buf.setUint8(26, 3);                   // filter_type = 3 (ekf/hybrid)
-    buf.setUint8(27, 180);                 // ekf_conf ~0.7
+    // Vibration etc.
+    final vib100 = ((imu.vibrationRms * 100).clamp(0, 65535)).toInt() & 0xFFFF;
+    buf.setUint16(20, vib100, Endian.little);
+    buf.setUint16(22, vib100, Endian.little); // peak ~ rms for demo
+    buf.setUint16(24, 0, Endian.little);      // dominant_freq
+    buf.setUint8(26, 3);                      // filter_type: 3 = hybrid/ekf
+    buf.setUint8(27, 180);                    // ekf_conf ~0.7
 
-    // cov + road snap placeholders (server or on-device fusion can fill)
-    buf.setFloat32(28, 0.0, Endian.little);
-    buf.setUint32(32, 0, Endian.little);   // road_segment_id
-    buf.setInt32(36, 0, Endian.little);    // partial matched (more fields would need bigger buf or extension)
-    // For full fidelity use the exact layout from models.py to_bytes in a future iteration.
+    // Server-filled fields (placeholders; real fusion happens in SERVICE or PostGIS)
+    buf.setFloat32(28, 0.0, Endian.little);   // cov_trace
+    buf.setUint32(32, 0, Endian.little);      // road_segment_id
+    buf.setInt32(36, 0, Endian.little);
+    buf.setInt32(40, 0, Endian.little);
+    buf.setUint8(44, 0);                      // snap_conf
+    buf.setUint8(45, 0);                      // flags
+    // timestamp: simple seconds since a recent epoch (server will interpret)
+    final ts = (DateTime.now().millisecondsSinceEpoch ~/ 1000) & 0xFFFFFFFF;
+    buf.setUint32(46, ts, Endian.little);
 
-    return buf.buffer.asUint8List(0, 38);
+    return buf.buffer.asUint8List(0, 50);
   }
 
   // SRT202 for IMU packet (simple tag using heading)

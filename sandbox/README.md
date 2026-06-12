@@ -71,12 +71,13 @@ python srt205_lbs.py        # SRT 205 LBS data model (new)
 
 **This sandbox** implements the **exact proposals** from the discussions as clean, dependency-light Python modules (numpy + scipy + stdlib for core path).
 
-LBS (cellular base stations) + road graph positioning (discussion 18) is fully prototyped + ported to real code:
-- `lbs_map_matcher.py`: likelihood-based snapping using TA/RSSI + known BS locations.
-- `srt205_lbs.py` + **real `SERVICE/egts/models.py:SrCustom205`** (with NeighborCell, registered in codec.py and const.py).
-- Integrated into `fusion_pipeline.py` (process_imu accepts lbs_data and uses snap to update EKF for road constraint).
-- `demo.py`/`generate_data.py`: full LBS generation + builds **real EGTS packets** (via SERVICE.codec) containing SRT204 (position/IMU) + SRT205 (LBS). Successful build (114 bytes example with LBS data).
-- Pipeline now combines IMU + GPS + LBS for road-accurate position (LBS snap with conf=0.99 keeps it on graph).
+LBS (cellular base stations) + road graph positioning (discussion 18) + full IMU/SRT204 (09/12/13-16) is fully prototyped + ported to real code:
+- `lbs_map_matcher.py` + `srt205_lbs.py` + **real `SERVICE/egts/models.py:SrCustom205`** + handler processing + lbs_aware_snap.
+- **IMU side**: `srt204.py` pattern + **real `SERVICE/egts/models.py:SrCustom204`** (full to_bytes/from_bytes with orientation/raw/vib/EKF/road fields) + filters (madgwick/ekf/vibration) + handler inertial_records block.
+- MOBILE_APP: symmetric collectors (lbs_collector + new imu_collector with real Android SensorManager accel/gyro + basic tilt/yaw integration), provider auto-wiring + _lastImu, all build*Packet now accept+embed ImuEvent (SRT204 in any trigger packet or dedicated buildImuPacket). 50-byte layout matches SERVICE model.
+- `fusion_pipeline.py` + `demo.py`: mixed SRT204+SRT205 packets (real SERVICE.codec build, ~114B), EKF + LBS snap updates.
+- Excel bidirectional for both 204/205.
+- Native Android: real sensors for both LBS (CellInfo) and IMU.
 
 ## Next steps (from the discussions themselves)
 
