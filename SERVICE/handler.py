@@ -184,11 +184,43 @@ def handler(event: dict, context=None) -> dict:
                                 mf = MadgwickFilter(beta=0.033, sample_period=0.1)
                                 # single step with accel + gyro (mag optional)
                                 mf.update_imu(np.array([gx, gy, gz]), np.array([ax, ay, az]))
-                                rec['server_madgwick_heading'] = round(np.degrees(mf.euler_angles[2]), 2)
+                                roll, pitch, yaw = mf.get_euler()
+                                rec['server_madgwick_heading'] = round(yaw, 2)
+                                rec['server_madgwick_roll'] = round(roll, 2)
                             except Exception as me:
                                 logging.debug("Madgwick demo skipped: %s", me)
                         except Exception as e:
                             logging.debug("vibration_metrics / filter demo skipped: %s", e)
+
+    # Combined LBS + IMU fusion demo (discussion 13/18 + 09/14)
+    # When both SRT204 and SRT205 (or LBS in 103) are present in the same packet batch,
+    # we can feed LBS-snapped position + IMU heading into EKF or particle filter.
+    fused = []
+    if inertial_records and lbs_records:
+        try:
+            import numpy as np
+            from egts.filters import EGTS_EKF
+            ekf = EGTS_EKF(dt=1.0)
+            # Use first LBS snap (if matched) + first IMU heading as measurement
+            first_lbs = lbs_records[0] if lbs_records else {}
+            first_imu = inertial_records[0] if inertial_records else {}
+            lat = first_lbs.get('matched_lat') or first_lbs.get('raw_lbs_lat')
+            lon = first_lbs.get('matched_lon') or first_lbs.get('raw_lbs_lon')
+            hdg = first_imu.get('heading_deg') or first_imu.get('server_madgwick_heading')
+            if lat and lon:
+                ekf.init(lat, lon, hdg or 0.0)
+                # simple predict + update simulation
+                ekf.predict()
+                # In real: ekf.update_gps(...) or custom LBS+IMU update
+                fused.append({
+                    "fused_lat": round(ekf.x[0], 6),
+                    "fused_lon": round(ekf.x[1], 6),
+                    "fused_heading": round(np.degrees(ekf.x[4]) if len(ekf.x) > 4 else (hdg or 0), 1),
+                    "source": "LBS_snap + IMU_heading (demo EKF)"
+                })
+                logging.info("Combined LBS+IMU EKF fusion demo: %s", fused[-1])
+        except Exception as e:
+            logging.debug("Combined fusion demo skipped: %s", e)
 
     return _resp(200, {
         "ts":      datetime.now(timezone.utc).isoformat(),
@@ -196,6 +228,7 @@ def handler(event: dict, context=None) -> dict:
         "packets": [p.to_dict() for p in pkts],
         "lbs_records": lbs_records,          # LBS forwarding for map matching
         "inertial_records": inertial_records,  # SRT 204 fusion outputs
+        "fused_demo": fused,                 # Combined LBS + IMU (EKF stub)
     })
 
 

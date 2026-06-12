@@ -38,8 +38,9 @@ MOBILE_APP/android/app/profile/
 *.swp
 *.swo
 
-# Claude Code internal
-.claude/
+# Claude Code internal (settings stay local, but skills/commands are shared)
+.claude/*
+!.claude/commands
 
 # OS
 .DS_Store

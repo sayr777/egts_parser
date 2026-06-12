@@ -226,9 +226,17 @@ class TrackerProvider extends ChangeNotifier {
       // (for now manual via survey or future motion trigger; keeps data volume reasonable)
       // if (imu.vibrationRms > 0.15) { sendImuPacket(imu); }
 
-      // Simple on-device derived value example (placeholder):
-      // real vibration/heading fusion lives in SERVICE/egts/filters (vibration.py, madgwick.py, ekf.py)
-      // and can be called server-side on received SRT 204.
+      // Basic on-device yaw integration (demo for SRT 204 local heading)
+      // Uses gyro_z from the incoming IMU sample + previous heading.
+      // Real full Madgwick / EKF fusion is in SERVICE/egts/filters and can run on-device or server.
+      if (_lastImu != null) {
+        final dt = 0.1; // assume ~10 Hz from collector poll
+        final gzDeg = imu.gyroZ * (180 / 3.1415926535); // crude rad->deg
+        // accumulate (clamped, no magnetometer correction here)
+        final newH = (_lastImu!.headingDeg + gzDeg * dt) % 360.0;
+        // we don't mutate the incoming imu, just use for local state / future packets
+        // (in a real app you would feed this improved heading back into the ImuEvent or a fused state)
+      }
     });
   }
 
